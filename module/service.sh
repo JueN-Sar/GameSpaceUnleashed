@@ -1,16 +1,19 @@
 #!/system/bin/sh
+# Game Space Unleashed — Boot Service
+# Sets system properties to enable R3 chip features globally
 
-# Game Space Unleashed by MsysteM
-# service.sh - runs in late_start service mode
+MODDIR="${0%/*}"
 
-MODDIR=${0%/*}
-CONFIG_DIR="/data/adb/game_space_unleashed"
+# Wait for boot to complete
+while [ "$(getprop sys.boot_completed)" != "1" ]; do
+    sleep 1
+done
+sleep 5
 
-# Ensure config directory exists
-[ ! -d "$CONFIG_DIR" ] && mkdir -p "$CONFIG_DIR"
+# Enable GFRC (Game Frame Rate Control) hardware features
+resetprop vendor.gpp.gfrc.upscale.ratio 1
+resetprop vendor.gpp.gfrc.interp.rate 1
+resetprop persist.magic.super.resolution 1
 
-# Copy default config if missing
-if [ ! -f "$CONFIG_DIR/config.json" ]; then
-    cp "$MODDIR/config.json" "$CONFIG_DIR/config.json" 2>/dev/null
-    chmod 644 "$CONFIG_DIR/config.json"
-fi
+# Log
+log -t "GSU" "Game Space Unleashed: R3 chip properties set"

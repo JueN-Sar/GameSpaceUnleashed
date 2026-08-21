@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - 'release/*'
+      - 'claude/*'
     paths-ignore:
       - '**.md'
   workflow_dispatch:
@@ -25,97 +25,72 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android SDK components
+      - name: Download apktool
         run: |
-          sdkmanager --install "build-tools;35.0.0" "platforms;android-35" "ndk;27.0.12077973"
+          curl -L -o apktool.jar "https://github.com/iBotPeaches/Apktool/releases/download/v2.9.3/apktool_2.9.3.jar"
 
-      - name: Clone Dobby (inline hooking)
+      - name: Download APKs from release
         run: |
-          # Use LSPosed's maintained fork of Dobby (same version used by LSPosed with LSPlant)
-          git clone --depth=1 https://github.com/LSPosed/Dobby.git external/dobby
+          # Download original APKs from the apk-dump release
+          gh release download apk-dump -p "rm10.zip" || true
+          if [ -f rm10.zip ]; then
+            unzip rm10.zip
+          else
+            echo "ERROR: Could not download APK dump. Upload GameAssist.apk and GameSpace.apk to the 'apk-dump' release."
+            exit 1
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Clone LSPlant
+      - name: Decompile APKs
         run: |
-          git clone --depth=1 --branch v6.4 https://github.com/LSPosed/LSPlant.git external/lsplant
-          cd external/lsplant
-          git submodule update --init --recursive --depth=1 lsplant/src/main/jni/external/dex_builder
+          java -jar apktool.jar d GameAssist.apk -o GameAssist_decompiled -f
+          java -jar apktool.jar d GameSpace.apk -o GameSpace_decompiled -f
 
-      - name: Build native module (arm64-v8a)
+      - name: Apply patches
         run: |
-          export ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/27.0.12077973
-          cd native
-          mkdir -p build
-          cmake -B build -G Ninja \
-            -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
-            -DANDROID_ABI=arm64-v8a \
-            -DANDROID_PLATFORM=android-26 \
-            -DANDROID_STL=c++_static \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_CXX_SCAN_FOR_MODULES=OFF
-          cmake --build build -j$(nproc)
+          python3 patches/apply_patches.py GameAssist_decompiled GameSpace_decompiled
 
-      - name: Compile Java hooks to DEX
+      - name: Recompile APKs
         run: |
-          ANDROID_JAR=$ANDROID_SDK_ROOT/platforms/android-35/android.jar
-          BUILD_TOOLS=$ANDROID_SDK_ROOT/build-tools/35.0.0
-
-          # Compile Java
-          mkdir -p build/java
-          find java -name "*.java" > build/sources.txt
-          javac -source 11 -target 11 \
-            -cp "$ANDROID_JAR" \
-            -d build/java \
-            @build/sources.txt
-
-          # Convert to DEX
-          mkdir -p build/dex
-          $BUILD_TOOLS/d8 \
-            --min-api 26 \
-            --output build/dex \
-            $(find build/java -name "*.class")
+          java -jar apktool.jar b GameAssist_decompiled -o GameAssist_patched.apk
+          java -jar apktool.jar b GameSpace_decompiled -o GameSpace_patched.apk
 
       - name: Package Magisk module
         run: |
-          mkdir -p build/module/zygisk
-          mkdir -p build/module/webroot
-          mkdir -p build/module/dex
+          VERSION=$(grep 'version=' module/module.prop | cut -d'=' -f2)
+          
+          mkdir -p build/module/system/app/GameAssist
+          mkdir -p build/module/system/priv-app/GameSpace
           mkdir -p build/module/META-INF/com/google/android
-
+          
           # Copy module files
           cp module/module.prop build/module/
           cp module/customize.sh build/module/
           cp module/service.sh build/module/
-          cp module/post-fs-data.sh build/module/
           cp module/uninstall.sh build/module/
-          cp module/config.json build/module/
-          cp -r module/webroot/* build/module/webroot/
           cp module/META-INF/com/google/android/update-binary build/module/META-INF/com/google/android/
           cp module/META-INF/com/google/android/updater-script build/module/META-INF/com/google/android/
-
-          # Copy native library (rename to arm64-v8a.so for Zygisk)
-          cp native/build/lib/arm64-v8a/libgame_space_unleashed.so build/module/zygisk/arm64-v8a.so
-
-          # Copy DEX
-          cp build/dex/classes.dex build/module/dex/
-
+          
+          # Copy patched APKs
+          cp GameAssist_patched.apk build/module/system/app/GameAssist/GameAssist.apk
+          cp GameSpace_patched.apk build/module/system/priv-app/GameSpace/GameSpace.apk
+          
           # Create flashable zip
           cd build/module
-          VERSION=$(grep 'version=' module.prop | cut -d'=' -f2)
           zip -r "../../GameSpaceUnleashed-${VERSION}.zip" .
-
-          # Verify zip contents
-          echo "=== Zip contents ==="
+          
           cd ../..
+          echo "=== Module contents ==="
           unzip -l "GameSpaceUnleashed-${VERSION}.zip"
 
       - name: Get version
         id: version
         run: |
           VERSION=$(grep 'version=' module/module.prop | cut -d'=' -f2)
+          VERSIONCODE=$(grep 'versionCode=' module/module.prop | cut -d'=' -f2)
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "versionCode=${VERSIONCODE}" >> $GITHUB_OUTPUT
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -131,30 +106,50 @@ jobs:
           make_latest: true
           files: GameSpaceUnleashed-*.zip
           body: |
-            ## Game Space Unleashed by MsysteM
+            ## Game Space Unleashed ${{ steps.version.outputs.version }} by MsysteM
 
-            Magisk module to unlock Super Resolution and Game Space features for all games on RedMagic devices.
-            No LSPosed required - powered by Zygisk + LSPlant.
+            Magisk module to unlock **ALL** Game Space features for **ALL** games on RedMagic devices.
+            No LSPosed required — pure APK overlay.
 
-            ### Features
+            ### Unlocked Features
             - ⚡ Super Resolution / Superior Pic Quality for ALL games
-            - 🎮 Global Game Mode - treat any app as a game
-            - 🛡️ No Kill - prevent background app cleanup
-            - 🔲 Hide Energy Cube overlay
-            - 📐 Small Window for all apps
-            - ✍️ Extended watermark text length
+            - 🎮 Frame Rate Boost / Frame Interpolation for ALL games
+            - 🎯 Crosshair, Hunt Mode, Sight Assist for ALL games
+            - 🤖 AI Trigger, Sound Equalizer, 4D Vibrate for ALL games
+            - 📊 Game Prediction, Combat Power, Voice Controller
+            - ⚙️ 55 ZTE feature flags force-enabled
+            - 🎯 Aim helper unlocked for ALL games
+            - 🏎️ Touch precision for ALL games
 
             ### Requirements
-            - Magisk with Zygisk or ReZygisk
             - RedMagic device with Game Space
-            - KsuWebUI for settings interface
+            - Magisk v20.4+
+            - GameAssist v16.5 / GameSpace v16.0
 
             ### Installation
             1. Download `GameSpaceUnleashed-${{ steps.version.outputs.version }}.zip` below
-            2. Open Magisk → Modules → Install from storage
-            3. Select the zip and flash
-            4. Reboot
-            5. Open KsuWebUI → Game Space Unleashed
-            6. Toggle features and tap "Apply & Restart Games"
+            2. Magisk → Modules → Install from storage
+            3. Reboot
+            4. Open any game → ALL features available!
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update auto-updater JSON
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          VERSIONCODE=${{ steps.version.outputs.versionCode }}
+          cat > update.json << UPDATEEOF
+          {
+            "version": "${VERSION}",
+            "versionCode": ${VERSIONCODE},
+            "zipUrl": "https://github.com/JueN-Sar/GameSpaceUnleashed/releases/download/${VERSION}/GameSpaceUnleashed-${VERSION}.zip",
+            "changelog": "https://github.com/JueN-Sar/GameSpaceUnleashed/releases/tag/${VERSION}"
+          }
+          UPDATEEOF
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add update.json
+          git diff --cached --quiet || git commit -m "chore: update auto-updater to ${VERSION}" && git push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

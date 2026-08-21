@@ -1,7 +1,7 @@
 id=game_space_unleashed
 name=Game Space Unleashed by MsysteM
-version=v1.0.0
-versionCode=1
+version=v2.0.0
+versionCode=200
 author=MsysteM
-description=Unlock Super Resolution, Global Game Mode & more for all games on RedMagic devices. No LSPosed required.
-updateJson=
+description=Unlock ALL Game Space features for ALL games on RedMagic devices. Super Resolution, Frame Rate Boost, Plugins, and more — no LSPosed required.
+updateJson=https://raw.githubusercontent.com/JueN-Sar/GameSpaceUnleashed/main/update.json
