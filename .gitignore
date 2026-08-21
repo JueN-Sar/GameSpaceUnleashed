@@ -1,0 +1,18 @@
+# Build outputs
+build/
+native/build/
+*.zip
+*.so
+
+# External dependencies (cloned by CI)
+external/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+.cxx/
+
+# OS
+.DS_Store
+Thumbs.db
