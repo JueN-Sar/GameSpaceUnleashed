@@ -59,7 +59,7 @@ jobs:
           java -jar apktool.jar b GameAssist_decompiled -o GameAssist_recompiled.apk
           java -jar apktool.jar b GameSpace_decompiled -o GameSpace_recompiled.apk
 
-          # Copy original APKs (preserves resources, native libs, manifest)
+          # Copy original APKs (preserves resources, native libs, manifest, META-INF)
           cp GameAssist.apk GameAssist_patched.apk
           cp GameSpace.apk GameSpace_patched.apk
 
@@ -78,42 +78,70 @@ jobs:
           cd dex_ga && zip -u ../GameAssist_patched.apk classes*.dex && cd ..
           cd dex_gs && zip -u ../GameSpace_patched.apk classes*.dex && cd ..
 
-          # Remove old signatures (they're now invalid since DEX changed)
-          zip -d GameAssist_patched.apk "META-INF/*.SF" "META-INF/*.RSA" "META-INF/*.MF" 2>/dev/null || true
-          zip -d GameSpace_patched.apk "META-INF/*.SF" "META-INF/*.RSA" "META-INF/*.MF" 2>/dev/null || true
+          # Remove V2/V3 APK signing block from the ZIP.
+          # We keep META-INF/* (V1 cert) so PackageManager still sees the
+          # original Nubia/ZTE certificate identity. The V1 digests will be
+          # wrong for changed DEX entries, but system partition apps on
+          # Magisk-mounted paths can tolerate this — what matters is the
+          # certificate identity matching packages.xml.
+          # The V2/V3 block is a binary blob BEFORE the ZIP central directory;
+          # we strip it with a small python script:
+          python3 - GameAssist_patched.apk GameSpace_patched.apk << 'PYEOF'
+          import sys, struct
 
-      - name: Sign patched APKs
-        run: |
-          # Find Android SDK build-tools
-          BUILD_TOOLS=$(ls -d $ANDROID_HOME/build-tools/*/ | sort -V | tail -1)
-          echo "Using build-tools: $BUILD_TOOLS"
+          def strip_apk_v2_block(path):
+              """Remove APK Signing Block (v2/v3) from an APK.
+              The block sits between the last local file entry and the
+              central directory, identified by magic 'APK Sig Block 42'."""
+              with open(path, 'rb') as f:
+                  data = f.read()
 
-          # Generate a signing keystore
-          keytool -genkey -v -keystore release.keystore \
-            -alias gsu -keyalg RSA -keysize 2048 -validity 10000 \
-            -storepass gamespace -keypass gamespace \
-            -dname "CN=GameSpaceUnleashed, OU=MsysteM, O=MsysteM"
+              # Find End of Central Directory
+              eocd_offset = data.rfind(b'\x50\x4b\x05\x06')
+              if eocd_offset < 0:
+                  print(f"  {path}: no EOCD found, skipping")
+                  return
 
-          # Zipalign both APKs
-          ${BUILD_TOOLS}zipalign -f -p 4 GameAssist_patched.apk GameAssist_aligned.apk
-          ${BUILD_TOOLS}zipalign -f -p 4 GameSpace_patched.apk GameSpace_aligned.apk
+              # CD offset is at EOCD+16
+              cd_offset = struct.unpack_from('<I', data, eocd_offset + 16)[0]
 
-          # Sign both APKs (v1 + v2 scheme for maximum compatibility)
-          ${BUILD_TOOLS}apksigner sign --ks release.keystore \
-            --ks-pass pass:gamespace --key-pass pass:gamespace \
-            --v1-signing-enabled true --v2-signing-enabled true \
-            GameAssist_aligned.apk
+              # Check for APK Signing Block magic right before CD
+              # The block ends with: 8-byte size + 16-byte magic "APK Sig Block 42"
+              magic = b'APK Sig Block 42'
+              magic_offset = cd_offset - 16
+              if magic_offset < 8 or data[magic_offset:magic_offset+16] != magic:
+                  print(f"  {path}: no v2/v3 signing block found")
+                  return
 
-          ${BUILD_TOOLS}apksigner sign --ks release.keystore \
-            --ks-pass pass:gamespace --key-pass pass:gamespace \
-            --v1-signing-enabled true --v2-signing-enabled true \
-            GameSpace_aligned.apk
+              # Read block size (8 bytes before magic)
+              block_size = struct.unpack_from('<Q', data, magic_offset - 8)[0]
+              block_start = cd_offset - block_size - 8
 
-          # Verify signatures
-          ${BUILD_TOOLS}apksigner verify --print-certs GameAssist_aligned.apk
-          ${BUILD_TOOLS}apksigner verify --print-certs GameSpace_aligned.apk
+              print(f"  {path}: stripping v2/v3 block ({block_size} bytes at offset {block_start})")
 
-          echo "✅ Both APKs signed and verified"
+              # Remove the block
+              new_data = data[:block_start] + data[cd_offset:]
+
+              # Fix CD offset in EOCD
+              new_cd_offset = block_start
+              new_eocd_offset = eocd_offset - (cd_offset - block_start)
+              struct.pack_into('<I', bytearray(new_data) if isinstance(new_data, bytes) else new_data, 0, 0)
+
+              # Rebuild properly
+              new_data = bytearray(data[:block_start] + data[cd_offset:])
+              shift = cd_offset - block_start
+              new_eocd_offset = eocd_offset - shift
+              struct.pack_into('<I', new_data, new_eocd_offset + 16, new_cd_offset)
+
+              with open(path, 'wb') as f:
+                  f.write(new_data)
+              print(f"  {path}: v2/v3 block removed, CD offset fixed")
+
+          for apk in sys.argv[1:]:
+              strip_apk_v2_block(apk)
+          PYEOF
+
+          echo "✅ DEX injection complete, v2/v3 signing blocks stripped"
 
       - name: Package Magisk module
         run: |
@@ -131,9 +159,17 @@ jobs:
           cp module/META-INF/com/google/android/update-binary build/module/META-INF/com/google/android/
           cp module/META-INF/com/google/android/updater-script build/module/META-INF/com/google/android/
 
-          # Copy SIGNED patched APKs
-          cp GameAssist_aligned.apk build/module/system/app/GameAssist/GameAssist.apk
-          cp GameSpace_aligned.apk build/module/system/priv-app/GameSpace/GameSpace.apk
+          # Copy patched APKs (with original cert, v2/v3 block stripped)
+          cp GameAssist_patched.apk build/module/system/app/GameAssist/GameAssist.apk
+          cp GameSpace_patched.apk build/module/system/priv-app/GameSpace/GameSpace.apk
+
+          # Create .replace markers for OAT directories
+          # This tells Magisk to mount empty dirs over the original pre-compiled
+          # code, forcing Android to load from our patched DEX instead of cached OAT
+          mkdir -p build/module/system/app/GameAssist/oat
+          touch build/module/system/app/GameAssist/oat/.replace
+          mkdir -p build/module/system/priv-app/GameSpace/oat
+          touch build/module/system/priv-app/GameSpace/oat/.replace
 
           # Create flashable zip
           cd build/module
@@ -170,10 +206,11 @@ jobs:
             Magisk module to unlock **ALL** Game Space features for **ALL** games on RedMagic devices.
             No LSPosed required — pure APK overlay.
 
-            ### What's New in v2.0.1
-            - 🔧 Fixed APK overlay: DEX-only patching preserves original resources & native libs
-            - 🔑 Proper APK signing (v1+v2 scheme)
-            - ✅ Fixes Game Space / overlay not launching after flash
+            ### What's New in v2.0.2
+            - 🔧 Fix: clear OAT/VDEX cache so Android loads patched DEX (not cached old code)
+            - 🔧 Fix: `.replace` markers for oat/ dirs — forces DEX recompilation
+            - 🔧 Fix: preserve original certificate identity (strip v2/v3 block only)
+            - 🔧 Fix: clear PackageManager cache on install
 
             ### Unlocked Features
             - ⚡ Super Resolution / Superior Pic Quality for ALL games

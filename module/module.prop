@@ -1,7 +1,7 @@
 id=game_space_unleashed
 name=Game Space Unleashed by MsysteM
-version=v2.0.1
-versionCode=201
+version=v2.0.2
+versionCode=202
 author=MsysteM
 description=Unlock ALL Game Space features for ALL games on RedMagic devices. Super Resolution, Frame Rate Boost, Plugins, and more — no LSPosed required.
 updateJson=https://raw.githubusercontent.com/JueN-Sar/GameSpaceUnleashed/main/update.json
