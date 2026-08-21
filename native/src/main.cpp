@@ -11,6 +11,7 @@
 #include <sys/stat.h>
 #include <android/log.h>
 #include <dlfcn.h>
+#include <link.h>
 #include <vector>
 #include <string>
 
@@ -21,6 +22,144 @@
 #define TAG "GSU-Native"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
+
+// =============================================================================
+// ELF Symbol Resolver — finds hidden/unexported symbols in libart.so
+// dlsym() can't see these on Android 14+, but LSPlant needs them.
+// =============================================================================
+
+class ElfSymbolResolver {
+public:
+    static ElfSymbolResolver &instance() {
+        static ElfSymbolResolver resolver;
+        return resolver;
+    }
+
+    bool init() {
+        if (initialized_) return valid_;
+
+        initialized_ = true;
+        struct CallbackData {
+            ElfSymbolResolver *self;
+        } data{this};
+
+        dl_iterate_phdr([](struct dl_phdr_info *info, size_t, void *arg) -> int {
+            auto *d = static_cast<CallbackData *>(arg);
+            if (info->dlpi_name && strstr(info->dlpi_name, "libart.so")) {
+                d->self->parseLib(info);
+                return 1; // stop
+            }
+            return 0;
+        }, &data);
+
+        valid_ = (symtab_ && strtab_ && symcount_ > 0);
+        if (valid_) {
+            LOGI("ElfSymbolResolver: found libart.so with %u symbols", symcount_);
+        } else {
+            LOGE("ElfSymbolResolver: failed to parse libart.so symbol table");
+        }
+        return valid_;
+    }
+
+    void *resolve(std::string_view name) {
+        if (!valid_) return nullptr;
+        for (uint32_t i = 0; i < symcount_; i++) {
+            if (symtab_[i].st_shndx == SHN_UNDEF) continue;
+            const char *sym_name = strtab_ + symtab_[i].st_name;
+            if (name == sym_name) {
+                return reinterpret_cast<void *>(base_ + symtab_[i].st_value);
+            }
+        }
+        return nullptr;
+    }
+
+    void *resolvePrefix(std::string_view prefix) {
+        if (!valid_) return nullptr;
+        for (uint32_t i = 0; i < symcount_; i++) {
+            if (symtab_[i].st_shndx == SHN_UNDEF) continue;
+            const char *sym_name = strtab_ + symtab_[i].st_name;
+            if (strncmp(sym_name, prefix.data(), prefix.size()) == 0) {
+                return reinterpret_cast<void *>(base_ + symtab_[i].st_value);
+            }
+        }
+        return nullptr;
+    }
+
+private:
+    ElfSymbolResolver() = default;
+
+    void parseLib(struct dl_phdr_info *info) {
+        base_ = info->dlpi_addr;
+
+        // Find PT_DYNAMIC segment
+        for (int i = 0; i < info->dlpi_phnum; i++) {
+            if (info->dlpi_phdr[i].p_type != PT_DYNAMIC) continue;
+
+            auto *dyn = reinterpret_cast<ElfW(Dyn) *>(base_ + info->dlpi_phdr[i].p_vaddr);
+
+            for (; dyn->d_tag != DT_NULL; dyn++) {
+                switch (dyn->d_tag) {
+                    case DT_SYMTAB:
+                        symtab_ = reinterpret_cast<const ElfW(Sym) *>(dyn->d_un.d_ptr);
+                        break;
+                    case DT_STRTAB:
+                        strtab_ = reinterpret_cast<const char *>(dyn->d_un.d_ptr);
+                        break;
+                    case DT_HASH: {
+                        // SysV hash: [nbucket, nchain, ...] — nchain == symbol count
+                        auto *hash = reinterpret_cast<const uint32_t *>(dyn->d_un.d_ptr);
+                        symcount_ = hash[1];
+                        break;
+                    }
+                    case DT_GNU_HASH: {
+                        // GNU hash — compute symbol count from buckets
+                        if (symcount_ == 0) {
+                            symcount_ = gnuHashSymcount(
+                                reinterpret_cast<const uint8_t *>(dyn->d_un.d_ptr));
+                        }
+                        break;
+                    }
+                }
+            }
+            break;
+        }
+    }
+
+    static uint32_t gnuHashSymcount(const uint8_t *gnu_hash) {
+        // GNU hash header: [nbuckets, symoffset, bloom_size, bloom_shift]
+        auto *header = reinterpret_cast<const uint32_t *>(gnu_hash);
+        uint32_t nbuckets = header[0];
+        uint32_t symoffset = header[1];
+        uint32_t bloom_size = header[2];
+
+        // Skip past bloom filter and buckets to find chains
+        const uint32_t *buckets = reinterpret_cast<const uint32_t *>(
+            gnu_hash + 16 + bloom_size * sizeof(ElfW(Addr)));
+        const uint32_t *chains = buckets + nbuckets;
+
+        // Find the highest bucket value
+        uint32_t max_sym = 0;
+        for (uint32_t i = 0; i < nbuckets; i++) {
+            if (buckets[i] > max_sym) max_sym = buckets[i];
+        }
+        if (max_sym == 0) return symoffset;
+
+        // Walk the chain from max_sym until we hit the end (bit 0 set)
+        const uint32_t *chain = chains + (max_sym - symoffset);
+        while ((*chain & 1) == 0) {
+            chain++;
+            max_sym++;
+        }
+        return max_sym + 1;
+    }
+
+    bool initialized_ = false;
+    bool valid_ = false;
+    ElfW(Addr) base_ = 0;
+    const ElfW(Sym) *symtab_ = nullptr;
+    const char *strtab_ = nullptr;
+    uint32_t symcount_ = 0;
+};
 
 static constexpr const char *CONFIG_PATH = "/data/adb/game_space_unleashed/config.json";
 
@@ -194,6 +333,13 @@ private:
     std::vector<uint8_t> configData_;
 
     bool initLSPlant(JNIEnv *env) {
+        // Initialize our ELF symbol resolver for libart.so
+        auto &resolver = ElfSymbolResolver::instance();
+        if (!resolver.init()) {
+            LOGE("Failed to initialize ELF symbol resolver for libart.so");
+            return false;
+        }
+
         return lsplant::Init(env, lsplant::InitInfo{
             .inline_hooker = [](void *target, void *hooker) -> void* {
                 dobby_dummy_func_t origin = nullptr;
@@ -206,10 +352,17 @@ private:
                 return DobbyDestroy(target) == 0;
             },
             .art_symbol_resolver = [](std::string_view symbol) -> void* {
-                return dlsym(RTLD_DEFAULT, symbol.data());
+                // Use ELF parser to find hidden ART symbols that dlsym can't see
+                void *addr = ElfSymbolResolver::instance().resolve(symbol);
+                if (!addr) {
+                    // Fallback to dlsym for exported symbols
+                    addr = dlsym(RTLD_DEFAULT, symbol.data());
+                }
+                return addr;
             },
-            .art_symbol_prefix_resolver = [](std::string_view symbol) -> void* {
-                return dlsym(RTLD_DEFAULT, symbol.data());
+            .art_symbol_prefix_resolver = [](std::string_view prefix) -> void* {
+                // Prefix matching — iterate ELF symbol table
+                return ElfSymbolResolver::instance().resolvePrefix(prefix);
             },
         });
     }
