@@ -42,28 +42,87 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Decompile APKs
+      - name: Decompile APKs (DEX only — no resource recompilation)
         run: |
-          java -jar apktool.jar d GameAssist.apk -o GameAssist_decompiled -f
-          java -jar apktool.jar d GameSpace.apk -o GameSpace_decompiled -f
+          # --no-res: only decompile DEX (smali), skip resources
+          # This avoids needing device framework and preserves resources perfectly
+          java -jar apktool.jar d --no-res GameAssist.apk -o GameAssist_decompiled -f
+          java -jar apktool.jar d --no-res GameSpace.apk -o GameSpace_decompiled -f
 
       - name: Apply patches
         run: |
           python3 patches/apply_patches.py GameAssist_decompiled GameSpace_decompiled
 
-      - name: Recompile APKs
+      - name: Recompile patched DEX and inject into original APKs
         run: |
-          java -jar apktool.jar b GameAssist_decompiled -o GameAssist_patched.apk
-          java -jar apktool.jar b GameSpace_decompiled -o GameSpace_patched.apk
+          # Recompile smali → DEX only
+          java -jar apktool.jar b GameAssist_decompiled -o GameAssist_recompiled.apk
+          java -jar apktool.jar b GameSpace_decompiled -o GameSpace_recompiled.apk
+
+          # Copy original APKs (preserves resources, native libs, manifest)
+          cp GameAssist.apk GameAssist_patched.apk
+          cp GameSpace.apk GameSpace_patched.apk
+
+          # Extract patched DEX files from recompiled APK
+          mkdir -p dex_ga dex_gs
+          cd dex_ga && unzip -o ../GameAssist_recompiled.apk 'classes*.dex' && cd ..
+          cd dex_gs && unzip -o ../GameSpace_recompiled.apk 'classes*.dex' && cd ..
+
+          echo "=== Patched DEX files (GameAssist) ==="
+          ls -la dex_ga/
+
+          echo "=== Patched DEX files (GameSpace) ==="
+          ls -la dex_gs/
+
+          # Replace DEX files in original APKs (keeps everything else intact)
+          cd dex_ga && zip -u ../GameAssist_patched.apk classes*.dex && cd ..
+          cd dex_gs && zip -u ../GameSpace_patched.apk classes*.dex && cd ..
+
+          # Remove old signatures (they're now invalid since DEX changed)
+          zip -d GameAssist_patched.apk "META-INF/*.SF" "META-INF/*.RSA" "META-INF/*.MF" 2>/dev/null || true
+          zip -d GameSpace_patched.apk "META-INF/*.SF" "META-INF/*.RSA" "META-INF/*.MF" 2>/dev/null || true
+
+      - name: Sign patched APKs
+        run: |
+          # Find Android SDK build-tools
+          BUILD_TOOLS=$(ls -d $ANDROID_HOME/build-tools/*/ | sort -V | tail -1)
+          echo "Using build-tools: $BUILD_TOOLS"
+
+          # Generate a signing keystore
+          keytool -genkey -v -keystore release.keystore \
+            -alias gsu -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass gamespace -keypass gamespace \
+            -dname "CN=GameSpaceUnleashed, OU=MsysteM, O=MsysteM"
+
+          # Zipalign both APKs
+          ${BUILD_TOOLS}zipalign -f -p 4 GameAssist_patched.apk GameAssist_aligned.apk
+          ${BUILD_TOOLS}zipalign -f -p 4 GameSpace_patched.apk GameSpace_aligned.apk
+
+          # Sign both APKs (v1 + v2 scheme for maximum compatibility)
+          ${BUILD_TOOLS}apksigner sign --ks release.keystore \
+            --ks-pass pass:gamespace --key-pass pass:gamespace \
+            --v1-signing-enabled true --v2-signing-enabled true \
+            GameAssist_aligned.apk
+
+          ${BUILD_TOOLS}apksigner sign --ks release.keystore \
+            --ks-pass pass:gamespace --key-pass pass:gamespace \
+            --v1-signing-enabled true --v2-signing-enabled true \
+            GameSpace_aligned.apk
+
+          # Verify signatures
+          ${BUILD_TOOLS}apksigner verify --print-certs GameAssist_aligned.apk
+          ${BUILD_TOOLS}apksigner verify --print-certs GameSpace_aligned.apk
+
+          echo "✅ Both APKs signed and verified"
 
       - name: Package Magisk module
         run: |
           VERSION=$(grep 'version=' module/module.prop | cut -d'=' -f2)
-          
+
           mkdir -p build/module/system/app/GameAssist
           mkdir -p build/module/system/priv-app/GameSpace
           mkdir -p build/module/META-INF/com/google/android
-          
+
           # Copy module files
           cp module/module.prop build/module/
           cp module/customize.sh build/module/
@@ -71,15 +130,15 @@ jobs:
           cp module/uninstall.sh build/module/
           cp module/META-INF/com/google/android/update-binary build/module/META-INF/com/google/android/
           cp module/META-INF/com/google/android/updater-script build/module/META-INF/com/google/android/
-          
-          # Copy patched APKs
-          cp GameAssist_patched.apk build/module/system/app/GameAssist/GameAssist.apk
-          cp GameSpace_patched.apk build/module/system/priv-app/GameSpace/GameSpace.apk
-          
+
+          # Copy SIGNED patched APKs
+          cp GameAssist_aligned.apk build/module/system/app/GameAssist/GameAssist.apk
+          cp GameSpace_aligned.apk build/module/system/priv-app/GameSpace/GameSpace.apk
+
           # Create flashable zip
           cd build/module
           zip -r "../../GameSpaceUnleashed-${VERSION}.zip" .
-          
+
           cd ../..
           echo "=== Module contents ==="
           unzip -l "GameSpaceUnleashed-${VERSION}.zip"
@@ -110,6 +169,11 @@ jobs:
 
             Magisk module to unlock **ALL** Game Space features for **ALL** games on RedMagic devices.
             No LSPosed required — pure APK overlay.
+
+            ### What's New in v2.0.1
+            - 🔧 Fixed APK overlay: DEX-only patching preserves original resources & native libs
+            - 🔑 Proper APK signing (v1+v2 scheme)
+            - ✅ Fixes Game Space / overlay not launching after flash
 
             ### Unlocked Features
             - ⚡ Super Resolution / Superior Pic Quality for ALL games
@@ -146,7 +210,7 @@ jobs:
             "changelog": "https://github.com/JueN-Sar/GameSpaceUnleashed/releases/tag/${VERSION}"
           }
           UPDATEEOF
-          
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add update.json
