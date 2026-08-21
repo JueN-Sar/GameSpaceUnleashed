@@ -1,19 +1,19 @@
 #!/system/bin/sh
 # Game Space Unleashed by MsysteM — Installation Script
+# Property-only approach: no APK replacement, original apps stay intact
 
 SKIPUNZIP=0
 
 ui_print "╔══════════════════════════════════════╗"
 ui_print "║   Game Space Unleashed by MsysteM    ║"
-ui_print "║            v2.0.1                     ║"
+ui_print "║            v2.1.0                     ║"
 ui_print "╚══════════════════════════════════════╝"
 ui_print ""
-ui_print "→ Unlocking ALL Game Space features..."
-ui_print "  ✓ Super Resolution for ALL games"
-ui_print "  ✓ Frame Rate Boost for ALL games"
-ui_print "  ✓ ALL plugins enabled for ALL games"
-ui_print "  ✓ Aim helper for ALL games"
-ui_print "  ✓ 55 feature flags unlocked"
+ui_print "→ Property-based feature unlock"
+ui_print "  ✓ No APK replacement — original apps intact"
+ui_print "  ✓ All ZTE feature flags via system properties"
+ui_print "  ✓ All plugins enabled via Settings.Global"
+ui_print "  ✓ R3 chip GFRC features enabled"
 ui_print ""
 
 # Check if this is a RedMagic device
@@ -25,51 +25,35 @@ if ! getprop ro.product.brand | grep -iq "nubia"; then
 fi
 
 # Check if GameAssist exists
-if [ ! -d "/system/app/GameAssist" ]; then
-    ui_print "⚠ Warning: GameAssist not found at /system/app/GameAssist"
-    ui_print "  Game Space overlay features may not work."
+if [ -d "/system/app/GameAssist" ]; then
+    ui_print "  ✓ GameAssist found at /system/app/GameAssist"
+else
+    ui_print "  ⚠ GameAssist not found"
 fi
 
 # Check if GameSpace exists
-if [ ! -d "/system/priv-app/GameSpace" ]; then
-    ui_print "⚠ Warning: GameSpace not found at /system/priv-app/GameSpace"
-    ui_print "  Game launcher features may not work."
+if [ -d "/system/priv-app/GameSpace" ]; then
+    ui_print "  ✓ GameSpace found at /system/priv-app/GameSpace"
+else
+    ui_print "  ⚠ GameSpace not found"
 fi
 
-# === Critical: Clear cached pre-compiled code (OAT/VDEX) ===
-# Android caches ahead-of-time compiled native code from the original DEX.
-# If we don't clear this, Android loads the OLD unpatched code from cache
-# instead of our patched DEX files.
-ui_print "→ Clearing OAT/VDEX cache for GameAssist..."
-rm -rf /data/dalvik-cache/arm64/system@app@GameAssist@GameAssist.apk@classes*
-rm -rf /data/dalvik-cache/arm/system@app@GameAssist@GameAssist.apk@classes*
-rm -rf /data/dalvik-cache/*/system@app@GameAssist@*
+# Remove any APK overlays from previous versions
+# (v2.0.x used APK replacement which broke overlay permissions)
+rm -rf "$MODPATH/system/app/GameAssist" 2>/dev/null
+rm -rf "$MODPATH/system/priv-app/GameSpace" 2>/dev/null
+rm -rf "$MODPATH/system" 2>/dev/null
 
-ui_print "→ Clearing OAT/VDEX cache for GameSpace..."
-rm -rf /data/dalvik-cache/arm64/system@priv-app@GameSpace@GameSpace.apk@classes*
-rm -rf /data/dalvik-cache/arm/system@priv-app@GameSpace@GameSpace.apk@classes*
-rm -rf /data/dalvik-cache/*/system@priv-app@GameSpace@*
-
-# Also handle oat/ directories next to the APKs
-# Create .replace markers so Magisk mounts empty dirs over the original oat/ folders
-# This forces Android to recompile from our patched DEX
-ui_print "→ Replacing OAT directories..."
-mkdir -p "$MODPATH/system/app/GameAssist/oat"
-touch "$MODPATH/system/app/GameAssist/oat/.replace"
-mkdir -p "$MODPATH/system/priv-app/GameSpace/oat"
-touch "$MODPATH/system/priv-app/GameSpace/oat/.replace"
-
-# Clear PackageManager cache so it re-evaluates our APKs
-ui_print "→ Clearing package manager cache..."
-rm -rf /data/system/package_cache/*
-
-# Set permissions
+# Set permissions for service.sh
 set_perm_recursive $MODPATH 0 0 0755 0644
-set_perm_recursive $MODPATH/system 0 0 0755 0644
+set_perm $MODPATH/service.sh 0 0 0755
 
 ui_print ""
 ui_print "✓ Installation complete!"
 ui_print "→ Reboot to activate."
 ui_print "→ After reboot, open any game in Game Space"
 ui_print "  and ALL features will be available!"
+ui_print ""
+ui_print "Note: Features are enabled via system properties."
+ui_print "Original GameAssist/GameSpace APKs are NOT modified."
 ui_print ""
