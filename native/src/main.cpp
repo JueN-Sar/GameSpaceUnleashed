@@ -6,12 +6,15 @@
 
 #include <cstdlib>
 #include <cstring>
+#include <cerrno>
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <sys/mman.h>
 #include <android/log.h>
 #include <dlfcn.h>
 #include <link.h>
+#include <elf.h>
 #include <vector>
 #include <string>
 
@@ -24,141 +27,203 @@
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
 
 // =============================================================================
-// ELF Symbol Resolver — finds hidden/unexported symbols in libart.so
-// dlsym() can't see these on Android 14+, but LSPlant needs them.
+// ART Symbol Resolver — safe file-based ELF parser for prefix matching.
+// DobbySymbolResolver handles exact matches (it already has a working parser).
+// This class mmaps the libart.so *file* from disk and parses ELF section
+// headers for the .dynsym table. File-based parsing avoids all the pitfalls
+// of in-memory dynamic-segment walking (bad base-address arithmetic,
+// unbounded GNU-hash chain iteration, etc.).
 // =============================================================================
 
-class ElfSymbolResolver {
+class ArtSymbolResolver {
 public:
-    static ElfSymbolResolver &instance() {
-        static ElfSymbolResolver resolver;
+    static ArtSymbolResolver &instance() {
+        static ArtSymbolResolver resolver;
         return resolver;
     }
 
     bool init() {
         if (initialized_) return valid_;
-
         initialized_ = true;
-        struct CallbackData {
-            ElfSymbolResolver *self;
-        } data{this};
+
+        LOGI("ArtSymbolResolver: locating libart.so...");
+
+        // Step 1 — find libart.so load bias + file path via dl_iterate_phdr
+        struct FindData {
+            uintptr_t bias;
+            std::string path;
+            bool found;
+        } fd{0, {}, false};
 
         dl_iterate_phdr([](struct dl_phdr_info *info, size_t, void *arg) -> int {
-            auto *d = static_cast<CallbackData *>(arg);
+            auto *d = static_cast<FindData *>(arg);
             if (info->dlpi_name && strstr(info->dlpi_name, "libart.so")) {
-                d->self->parseLib(info);
-                return 1; // stop
+                d->bias = info->dlpi_addr;
+                d->path = info->dlpi_name;
+                d->found = true;
+                return 1;
             }
             return 0;
-        }, &data);
+        }, &fd);
 
-        valid_ = (symtab_ && strtab_ && symcount_ > 0);
-        if (valid_) {
-            LOGI("ElfSymbolResolver: found libart.so with %u symbols", symcount_);
-        } else {
-            LOGE("ElfSymbolResolver: failed to parse libart.so symbol table");
+        if (!fd.found || fd.path.empty()) {
+            LOGE("ArtSymbolResolver: libart.so not found via dl_iterate_phdr");
+            return false;
         }
-        return valid_;
+
+        loadBias_ = fd.bias;
+        artPath_  = fd.path;
+        LOGI("ArtSymbolResolver: libart.so at %s  bias=0x%lx",
+             artPath_.c_str(), (unsigned long)loadBias_);
+
+        // Step 2 — mmap the file
+        int fileFd = open(artPath_.c_str(), O_RDONLY);
+        if (fileFd < 0) {
+            LOGE("ArtSymbolResolver: open(%s) failed: %s",
+                 artPath_.c_str(), strerror(errno));
+            return false;
+        }
+
+        struct stat st{};
+        if (fstat(fileFd, &st) != 0 || st.st_size < (off_t)sizeof(Elf64_Ehdr)) {
+            LOGE("ArtSymbolResolver: fstat failed or file too small");
+            close(fileFd);
+            return false;
+        }
+
+        fileSize_ = (size_t)st.st_size;
+        fileData_ = (uint8_t *)mmap(nullptr, fileSize_, PROT_READ,
+                                    MAP_PRIVATE, fileFd, 0);
+        close(fileFd);
+
+        if (fileData_ == MAP_FAILED) {
+            fileData_ = nullptr;
+            LOGE("ArtSymbolResolver: mmap failed: %s", strerror(errno));
+            return false;
+        }
+
+        LOGI("ArtSymbolResolver: mmap'd %zu bytes, parsing ELF...", fileSize_);
+
+        // Step 3 — parse ELF section headers for .dynsym + .dynstr
+        if (!parseElfSections()) {
+            LOGE("ArtSymbolResolver: ELF parse failed");
+            cleanup();
+            return false;
+        }
+
+        valid_ = true;
+        LOGI("ArtSymbolResolver: ready — %zu dynsym entries", symcount_);
+        return true;
     }
 
-    void *resolve(std::string_view name) {
-        if (!valid_) return nullptr;
-        for (uint32_t i = 0; i < symcount_; i++) {
-            if (symtab_[i].st_shndx == SHN_UNDEF) continue;
-            const char *sym_name = strtab_ + symtab_[i].st_name;
-            if (name == sym_name) {
-                return reinterpret_cast<void *>(base_ + symtab_[i].st_value);
-            }
-        }
-        return nullptr;
-    }
-
+    // Prefix-match: return the first symbol whose name starts with |prefix|
     void *resolvePrefix(std::string_view prefix) {
-        if (!valid_) return nullptr;
-        for (uint32_t i = 0; i < symcount_; i++) {
-            if (symtab_[i].st_shndx == SHN_UNDEF) continue;
-            const char *sym_name = strtab_ + symtab_[i].st_name;
-            if (strncmp(sym_name, prefix.data(), prefix.size()) == 0) {
-                return reinterpret_cast<void *>(base_ + symtab_[i].st_value);
+        if (!valid_ || !symtab_ || !strtab_) return nullptr;
+
+        for (size_t i = 0; i < symcount_; i++) {
+            const auto &sym = symtab_[i];
+            if (sym.st_shndx == SHN_UNDEF || sym.st_value == 0) continue;
+            if (sym.st_name >= strtabSize_) continue;
+
+            const char *name = strtab_ + sym.st_name;
+            if (strncmp(name, prefix.data(), prefix.size()) == 0) {
+                void *addr = reinterpret_cast<void *>(loadBias_ + sym.st_value);
+                return addr;
             }
         }
         return nullptr;
     }
+
+    ~ArtSymbolResolver() { cleanup(); }
 
 private:
-    ElfSymbolResolver() = default;
+    ArtSymbolResolver() = default;
 
-    void parseLib(struct dl_phdr_info *info) {
-        base_ = info->dlpi_addr;
+    void cleanup() {
+        if (fileData_) {
+            munmap(fileData_, fileSize_);
+            fileData_ = nullptr;
+        }
+        symtab_     = nullptr;
+        strtab_     = nullptr;
+        strtabSize_ = 0;
+        symcount_   = 0;
+    }
 
-        // Find PT_DYNAMIC segment
-        for (int i = 0; i < info->dlpi_phnum; i++) {
-            if (info->dlpi_phdr[i].p_type != PT_DYNAMIC) continue;
+    // Parse section headers to locate .dynsym and its associated .dynstr.
+    // Section headers give us file-offset + size directly — no address
+    // translation needed, no hash-table walks, no unbounded loops.
+    bool parseElfSections() {
+        auto *ehdr = reinterpret_cast<Elf64_Ehdr *>(fileData_);
 
-            auto *dyn = reinterpret_cast<ElfW(Dyn) *>(base_ + info->dlpi_phdr[i].p_vaddr);
+        // Validate ELF magic
+        if (memcmp(ehdr->e_ident, ELFMAG, SELFMAG) != 0) {
+            LOGE("ArtSymbolResolver: bad ELF magic");
+            return false;
+        }
 
-            for (; dyn->d_tag != DT_NULL; dyn++) {
-                switch (dyn->d_tag) {
-                    case DT_SYMTAB:
-                        symtab_ = reinterpret_cast<const ElfW(Sym) *>(dyn->d_un.d_ptr);
-                        break;
-                    case DT_STRTAB:
-                        strtab_ = reinterpret_cast<const char *>(dyn->d_un.d_ptr);
-                        break;
-                    case DT_HASH: {
-                        // SysV hash: [nbucket, nchain, ...] — nchain == symbol count
-                        auto *hash = reinterpret_cast<const uint32_t *>(dyn->d_un.d_ptr);
-                        symcount_ = hash[1];
-                        break;
-                    }
-                    case DT_GNU_HASH: {
-                        // GNU hash — compute symbol count from buckets
-                        if (symcount_ == 0) {
-                            symcount_ = gnuHashSymcount(
-                                reinterpret_cast<const uint8_t *>(dyn->d_un.d_ptr));
-                        }
-                        break;
-                    }
-                }
+        if (ehdr->e_shoff == 0 || ehdr->e_shnum == 0 || ehdr->e_shentsize == 0) {
+            LOGE("ArtSymbolResolver: no section headers");
+            return false;
+        }
+
+        // Bounds-check the entire section-header table
+        size_t shTabEnd = ehdr->e_shoff
+                        + (size_t)ehdr->e_shnum * ehdr->e_shentsize;
+        if (shTabEnd > fileSize_) {
+            LOGE("ArtSymbolResolver: section headers out of bounds");
+            return false;
+        }
+
+        auto *shdrs = reinterpret_cast<Elf64_Shdr *>(fileData_ + ehdr->e_shoff);
+
+        // Find SHT_DYNSYM; its sh_link points at the matching SHT_STRTAB
+        for (uint16_t i = 0; i < ehdr->e_shnum; i++) {
+            if (shdrs[i].sh_type != SHT_DYNSYM) continue;
+
+            auto &dynsymHdr = shdrs[i];
+            // Bounds-check .dynsym data
+            if (dynsymHdr.sh_offset + dynsymHdr.sh_size > fileSize_) {
+                LOGE("ArtSymbolResolver: .dynsym data out of bounds");
+                return false;
             }
+
+            symtab_   = reinterpret_cast<Elf64_Sym *>(fileData_ + dynsymHdr.sh_offset);
+            symcount_ = dynsymHdr.sh_size / sizeof(Elf64_Sym);
+
+            // Locate .dynstr via sh_link
+            uint32_t strIdx = dynsymHdr.sh_link;
+            if (strIdx >= ehdr->e_shnum) {
+                LOGE("ArtSymbolResolver: .dynsym sh_link out of range");
+                symtab_ = nullptr;
+                return false;
+            }
+
+            auto &dynstrHdr = shdrs[strIdx];
+            if (dynstrHdr.sh_offset + dynstrHdr.sh_size > fileSize_) {
+                LOGE("ArtSymbolResolver: .dynstr data out of bounds");
+                symtab_ = nullptr;
+                return false;
+            }
+
+            strtab_     = reinterpret_cast<const char *>(fileData_ + dynstrHdr.sh_offset);
+            strtabSize_ = dynstrHdr.sh_size;
             break;
         }
+
+        return (symtab_ && strtab_ && symcount_ > 0);
     }
 
-    static uint32_t gnuHashSymcount(const uint8_t *gnu_hash) {
-        // GNU hash header: [nbuckets, symoffset, bloom_size, bloom_shift]
-        auto *header = reinterpret_cast<const uint32_t *>(gnu_hash);
-        uint32_t nbuckets = header[0];
-        uint32_t symoffset = header[1];
-        uint32_t bloom_size = header[2];
-
-        // Skip past bloom filter and buckets to find chains
-        const uint32_t *buckets = reinterpret_cast<const uint32_t *>(
-            gnu_hash + 16 + bloom_size * sizeof(ElfW(Addr)));
-        const uint32_t *chains = buckets + nbuckets;
-
-        // Find the highest bucket value
-        uint32_t max_sym = 0;
-        for (uint32_t i = 0; i < nbuckets; i++) {
-            if (buckets[i] > max_sym) max_sym = buckets[i];
-        }
-        if (max_sym == 0) return symoffset;
-
-        // Walk the chain from max_sym until we hit the end (bit 0 set)
-        const uint32_t *chain = chains + (max_sym - symoffset);
-        while ((*chain & 1) == 0) {
-            chain++;
-            max_sym++;
-        }
-        return max_sym + 1;
-    }
-
-    bool initialized_ = false;
-    bool valid_ = false;
-    ElfW(Addr) base_ = 0;
-    const ElfW(Sym) *symtab_ = nullptr;
-    const char *strtab_ = nullptr;
-    uint32_t symcount_ = 0;
+    bool       initialized_ = false;
+    bool       valid_        = false;
+    uintptr_t  loadBias_     = 0;
+    std::string artPath_;
+    uint8_t   *fileData_     = nullptr;
+    size_t     fileSize_     = 0;
+    Elf64_Sym *symtab_       = nullptr;
+    const char *strtab_      = nullptr;
+    size_t     strtabSize_   = 0;
+    size_t     symcount_     = 0;
 };
 
 static constexpr const char *CONFIG_PATH = "/data/adb/game_space_unleashed/config.json";
@@ -333,12 +398,17 @@ private:
     std::vector<uint8_t> configData_;
 
     bool initLSPlant(JNIEnv *env) {
-        // Initialize our ELF symbol resolver for libart.so
-        auto &resolver = ElfSymbolResolver::instance();
+        LOGI("Initializing ART symbol resolver...");
+
+        // Eagerly initialize the file-based resolver so any failure is
+        // logged before we hand the callbacks to LSPlant.
+        auto &resolver = ArtSymbolResolver::instance();
         if (!resolver.init()) {
-            LOGE("Failed to initialize ELF symbol resolver for libart.so");
-            return false;
+            LOGE("ART symbol resolver init failed — LSPlant may not work");
+            // Continue anyway; DobbySymbolResolver + dlsym may suffice.
         }
+
+        LOGI("Initializing LSPlant...");
 
         return lsplant::Init(env, lsplant::InitInfo{
             .inline_hooker = [](void *target, void *hooker) -> void* {
@@ -346,23 +416,24 @@ private:
                 if (DobbyHook(target, (dobby_dummy_func_t)hooker, &origin) == 0) {
                     return (void *)origin;
                 }
+                LOGE("DobbyHook failed for target %p", target);
                 return nullptr;
             },
             .inline_unhooker = [](void *target) -> bool {
                 return DobbyDestroy(target) == 0;
             },
             .art_symbol_resolver = [](std::string_view symbol) -> void* {
-                // Use ELF parser to find hidden ART symbols that dlsym can't see
-                void *addr = ElfSymbolResolver::instance().resolve(symbol);
+                // Dobby's resolver can find hidden / unexported symbols
+                // that dlsym cannot see on Android 14+.
+                void *addr = DobbySymbolResolver("libart.so", symbol.data());
                 if (!addr) {
-                    // Fallback to dlsym for exported symbols
                     addr = dlsym(RTLD_DEFAULT, symbol.data());
                 }
                 return addr;
             },
             .art_symbol_prefix_resolver = [](std::string_view prefix) -> void* {
-                // Prefix matching — iterate ELF symbol table
-                return ElfSymbolResolver::instance().resolvePrefix(prefix);
+                // Prefix-match via our safe file-based .dynsym parser.
+                return ArtSymbolResolver::instance().resolvePrefix(prefix);
             },
         });
     }
