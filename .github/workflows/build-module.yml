@@ -106,16 +106,29 @@ jobs:
           VERSION=$(grep 'version=' module.prop | cut -d'=' -f2)
           zip -r "../../GameSpaceUnleashed-${VERSION}.zip" .
 
+          # Verify zip contents
+          echo "=== Zip contents ==="
+          cd ../..
+          unzip -l "GameSpaceUnleashed-${VERSION}.zip"
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION=$(grep 'version=' module/module.prop | cut -d'=' -f2)
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: GameSpaceUnleashed
+          name: GameSpaceUnleashed-${{ steps.version.outputs.version }}
           path: GameSpaceUnleashed-*.zip
 
-      - name: Create release (on tag)
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Create/Update release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: Game Space Unleashed ${{ steps.version.outputs.version }}
+          make_latest: true
           files: GameSpaceUnleashed-*.zip
           body: |
             ## Game Space Unleashed by MsysteM
@@ -137,9 +150,11 @@ jobs:
             - KsuWebUI for settings interface
 
             ### Installation
-            1. Flash the zip in Magisk
-            2. Reboot
-            3. Open KsuWebUI → Game Space Unleashed
-            4. Toggle features and tap "Apply & Restart Games"
+            1. Download `GameSpaceUnleashed-${{ steps.version.outputs.version }}.zip` below
+            2. Open Magisk → Modules → Install from storage
+            3. Select the zip and flash
+            4. Reboot
+            5. Open KsuWebUI → Game Space Unleashed
+            6. Toggle features and tap "Apply & Restart Games"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
