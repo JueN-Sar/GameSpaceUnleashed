@@ -1,0 +1,159 @@
+# Game Space Unleashed by MsysteM — System Properties
+# These are set EARLY by Magisk (before zygote/apps start)
+# This ensures GameAssist/GameSpace read them before caching in <clinit>()
+#
+# Convention: com.zte.feature.Feature.getBoolean("ZTE_FEATURE_X")
+#   reads from SystemProperties.getBoolean("ro.vendor.feature.zte_feature_x")
+#   (lowercase, with ro.vendor.feature. prefix)
+
+# ── Core device identity ──
+ro.vendor.feature.zte_feature_red_magic=true
+ro.vendor.feature.zte_feature_red_magic_phone=true
+
+# ── Game Space / GameAssist master switches ──
+ro.vendor.feature.zte_feature_magic_game_assist=true
+ro.vendor.feature.zte_feature_gamespace_config=true
+ro.vendor.feature.zte_feature_base_game_plugin_game=true
+
+# ── Super Resolution & GFRC (R3 chip) ──
+ro.vendor.feature.zte_feature_magic_super_resolution=true
+ro.vendor.feature.zte_feature_superior_quality_game=true
+ro.vendor.feature.zte_feature_gfrc=true
+ro.vendor.feature.zte_feature_magic_resolutions=true
+ro.vendor.feature.zte_feature_magic_resolutions_settings=true
+
+# ── Plugin features ──
+ro.vendor.feature.zte_feature_gameassist_plugin_ai_trigger=true
+ro.vendor.feature.zte_feature_gameassist_plugin_biablo=true
+ro.vendor.feature.zte_feature_gameassist_plugin_card_assist=true
+ro.vendor.feature.zte_feature_gameassist_plugin_chat_assist=true
+ro.vendor.feature.zte_feature_gameassist_plugin_data_panel=true
+ro.vendor.feature.zte_feature_gameassist_plugin_fixedlook=true
+ro.vendor.feature.zte_feature_gameassist_plugin_game_ratio=true
+ro.vendor.feature.zte_feature_gameassist_plugin_4d_vibrate=true
+ro.vendor.feature.zte_feature_gameassist_plugin_ai_gamenotes=true
+ro.vendor.feature.zte_feature_gameassist_plugin_mode_card=true
+ro.vendor.feature.zte_feature_gameassist_plugin_operation_devices=true
+ro.vendor.feature.zte_feature_gameassist_plugin_redmagic_broadcast=true
+ro.vendor.feature.zte_feature_gameassist_plugin_redmagic_elvesaid=true
+ro.vendor.feature.zte_feature_gameassist_plugin_sort=true
+
+# ── Audio & Voice ──
+ro.vendor.feature.zte_feature_gameassist_audio_equalizer=true
+ro.vendor.feature.zte_feature_gameassist_voice_controller=true
+ro.vendor.feature.zte_feature_game_voice_assist=true
+ro.vendor.feature.zte_feature_game_voice_assist_v2=true
+ro.vendor.feature.zte_feature_game_dts_eq_float=true
+ro.vendor.feature.zte_feature_game_sound_probe=true
+ro.vendor.feature.zte_feature_ai_speaker=true
+
+# ── AI features ──
+ro.vendor.feature.zte_feature_game_ai_jarvis=true
+ro.vendor.feature.zte_feature_game_ai_tips=true
+ro.vendor.feature.zte_feature_ai_game_prediction=true
+ro.vendor.feature.zte_feature_ai_translation=true
+ro.vendor.feature.zte_feature_gameaiasst=true
+ro.vendor.feature.zte_feature_gameaiasst_abroad=true
+ro.vendor.feature.zte_feature_game_neo_translate=true
+
+# ── Game controls & input ──
+ro.vendor.feature.zte_feature_screen_key_map=true
+ro.vendor.feature.zte_feature_key_mouse_map=true
+ro.vendor.feature.zte_feature_redmagic_gamekey=true
+ro.vendor.feature.zte_feature_redmagic_touch_gamekey=true
+ro.vendor.feature.zte_feature_redmagic_touch_gamekey_support_portrait=true
+ro.vendor.feature.zte_feature_redmagic_x_gravity_gamepad=true
+ro.vendor.feature.zte_feature_redmagic_sports_handle=true
+ro.vendor.feature.zte_feature_camerakey_virtual_touch=true
+ro.vendor.feature.zte_feature_keymap_sensitivity_wheel_disc=true
+ro.vendor.feature.zte_feature_learned_behavior_x_gravity=true
+ro.vendor.feature.zte_feature_magic_virtual_handle=true
+ro.vendor.feature.zte_feature_sensor_operation_touch=true
+ro.vendor.feature.zte_feature_redmagic_aikey=true
+ro.vendor.feature.zte_feature_tp_game_partition=true
+
+# ── Display & visual ──
+ro.vendor.feature.zte_feature_game_display_filter_effect=true
+ro.vendor.feature.zte_feature_display_magic=true
+ro.vendor.feature.zte_feature_display_magic_detach_enable=true
+ro.vendor.feature.zte_feature_colorful_light=true
+ro.vendor.feature.zte_feature_game_high_lights=true
+ro.vendor.feature.zte_feature_game_precision_control=true
+ro.vendor.feature.zte_feature_refresh_rate_lite_option_mode=true
+ro.vendor.feature.zte_feature_magic_game_screen_saver=true
+
+# ── Hardware features ──
+ro.vendor.feature.zte_feature_game_fan=true
+ro.vendor.feature.zte_feature_liquid_cooling=true
+ro.vendor.feature.zte_feature_bypass_charge_separation=true
+ro.vendor.feature.zte_feature_support_charge_separation=true
+ro.vendor.feature.zte_feature_bend_indecate=true
+ro.vendor.feature.zte_feature_shoulder_key_launch_gamespace=true
+ro.vendor.feature.zte_feature_side_shortcut_key=true
+ro.vendor.feature.zte_feature_sar_control_4=true
+
+# ── Sidebar & overlay tiles ──
+ro.vendor.feature.zte_feature_anti_misoperate_nubia=true
+ro.vendor.feature.zte_feature_low_sugar=true
+ro.vendor.feature.zte_feature_windowreply_entrance_display=true
+ro.vendor.feature.zte_feature_multi_sub_screen=true
+ro.vendor.feature.zte_feature_host_performance_monitor=true
+ro.vendor.feature.zte_feature_package_plugin_vibrate=true
+ro.vendor.feature.zte_feature_game_plugin_counter=true
+
+# ── Recording & streaming ──
+ro.vendor.feature.zte_feature_game_random_record=true
+ro.vendor.feature.zte_feature_manual_record_only=true
+ro.vendor.feature.zte_feature_stream_game=true
+
+# ── Projection & multi-screen ──
+ro.vendor.feature.zte_feature_expand_projection_screen=true
+ro.vendor.feature.zte_feature_expand_projection_screen_3d_touchpanel=true
+ro.vendor.feature.zte_feature_expand_projection_screen_freeform=true
+ro.vendor.feature.zte_feature_mirror_projection_screen=true
+ro.vendor.feature.zte_feature_leia_3d_uart=true
+
+# ── Search, networking & misc ──
+ro.vendor.feature.zte_feature_gameassist_global_search=true
+ro.vendor.feature.zte_feature_gameassist_one_key_link=true
+ro.vendor.feature.zte_feature_gameassist_support_demi=true
+ro.vendor.feature.zte_feature_redmagic_game_latency_data_switch=true
+ro.vendor.feature.zte_feature_mini_programe_add_gamespace=true
+ro.vendor.feature.zte_feature_mtgpa_predownload=true
+ro.vendor.feature.zte_feature_neo_game_lib=true
+ro.vendor.feature.zte_feature_zperf_cube_gpsetting_enabled=true
+ro.vendor.feature.zte_feature_game_strategy_station=true
+ro.vendor.feature.zte_feature_redmagic_pc_game=true
+
+# ── GPU & performance ──
+ro.vendor.feature.zte_feature_support_mipmap_lod=true
+ro.vendor.feature.zte_feature_use_gpu_driver_update=true
+
+# ── Game Center settings sections ──
+ro.vendor.feature.zte_feature_game_center_menu=true
+ro.vendor.feature.zte_feature_game_center_mode_settings=true
+ro.vendor.feature.zte_feature_game_center_net=true
+ro.vendor.feature.zte_feature_game_center_not_disturb=true
+ro.vendor.feature.zte_feature_game_center_other_options=true
+ro.vendor.feature.zte_feature_game_center_screen_settings=true
+ro.vendor.feature.zte_feature_game_center_streaming=true
+ro.vendor.feature.zte_feature_game_center_flase_touch=true
+ro.vendor.feature.zte_feature_game_center_zte_flase_touch=true
+ro.vendor.feature.zte_feature_game_center_race_key_off=true
+ro.vendor.feature.zte_feature_game_center_about=true
+
+# ── Control panel ──
+ro.vendor.feature.zte_feature_game_controlpanel_menu=true
+ro.vendor.feature.zte_feature_game_controlpanel_adjust_operation=true
+
+# ── Planet / community features ──
+ro.vendor.feature.zte_feature_planet_agent=true
+ro.vendor.feature.zte_feature_planet_mora=true
+ro.vendor.feature.zte_feature_planet_resource_lib=true
+ro.vendor.feature.zte_feature_planet_video_banner=true
+
+# ── Score & lobby ──
+ro.vendor.feature.zte_feature_lobby_score_record=true
+
+# ── MFV window reply (used by windowReplyEnable()) ──
+ro.vendor.feature.mfv_feature_windowreply=true

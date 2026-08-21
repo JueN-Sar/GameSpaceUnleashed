@@ -1,246 +1,129 @@
 #!/system/bin/sh
-# Game Space Unleashed by MsysteM — Boot Service
-# Unlocks ALL Game Space features via system properties + Settings.Global
-# NO APK replacement — original apps stay intact with platform signature
+# Game Space Unleashed v2.2.0 by MsysteM — Boot Service
+# Properties are set in system.prop + post-fs-data.sh (BEFORE zygote)
+# This script handles: GFRC runtime props, Settings.Global, diagnostics
 
 MODDIR="${0%/*}"
+LOG="/sdcard/GSU_diagnostic.log"
 
-# Wait for boot to complete
+# Wait for boot to complete (Settings.Global requires system_server)
 while [ "$(getprop sys.boot_completed)" != "1" ]; do
     sleep 1
 done
-sleep 3
+sleep 5
 
-log -t "GSU" "Game Space Unleashed: Starting feature unlock..."
+log -t "GSU" "Game Space Unleashed v2.2.0: Starting post-boot setup..."
 
 # ====================================================================
-# 1. ZTE Feature Flags — set via system properties
-#    com.zte.feature.Feature.getBoolean("ZTE_FEATURE_X") reads from
-#    ro.vendor.feature.zte_feature_x (lowercase)
+# 1. Diagnostic dump — saves to /sdcard/GSU_diagnostic.log
+#    Flash the module, reboot, check this file to verify features
 # ====================================================================
 
-ZTE_FEATURES="
-zte_feature_red_magic
-zte_feature_red_magic_phone
-zte_feature_magic_game_assist
-zte_feature_magic_super_resolution
-zte_feature_superior_quality_game
-zte_feature_gfrc
-zte_feature_gameassist_plugin_ai_trigger
-zte_feature_gameassist_plugin_biablo
-zte_feature_gameassist_plugin_card_assist
-zte_feature_gameassist_plugin_chat_assist
-zte_feature_gameassist_plugin_data_panel
-zte_feature_gameassist_plugin_fixedlook
-zte_feature_gameassist_plugin_game_ratio
-zte_feature_gameassist_plugin_4d_vibrate
-zte_feature_gameassist_plugin_ai_gamenotes
-zte_feature_gameassist_plugin_mode_card
-zte_feature_gameassist_plugin_operation_devices
-zte_feature_gameassist_plugin_redmagic_broadcast
-zte_feature_gameassist_plugin_redmagic_elvesaid
-zte_feature_gameassist_plugin_sort
-zte_feature_gameassist_audio_equalizer
-zte_feature_gameassist_global_search
-zte_feature_gameassist_one_key_link
-zte_feature_gameassist_support_demi
-zte_feature_gameassist_voice_controller
-zte_feature_game_ai_jarvis
-zte_feature_game_ai_tips
-zte_feature_game_display_filter_effect
-zte_feature_game_dts_eq_float
-zte_feature_game_fan
-zte_feature_game_neo_translate
-zte_feature_game_plugin_counter
-zte_feature_game_random_record
-zte_feature_game_sound_probe
-zte_feature_game_strategy_station
-zte_feature_game_voice_assist
-zte_feature_game_voice_assist_v2
-zte_feature_ai_game_prediction
-zte_feature_ai_speaker
-zte_feature_ai_translation
-zte_feature_anti_misoperate_nubia
-zte_feature_bend_indecate
-zte_feature_bypass_charge_separation
-zte_feature_camerakey_virtual_touch
-zte_feature_colorful_light
-zte_feature_display_magic_detach_enable
-zte_feature_expand_projection_screen
-zte_feature_expand_projection_screen_3d_touchpanel
-zte_feature_expand_projection_screen_freeform
-zte_feature_gameaiasst
-zte_feature_gameaiasst_abroad
-zte_feature_host_performance_monitor
-zte_feature_keymap_sensitivity_wheel_disc
-zte_feature_key_mouse_map
-zte_feature_learned_behavior_x_gravity
-zte_feature_low_sugar
-zte_feature_magic_game_screen_saver
-zte_feature_magic_resolutions_settings
-zte_feature_magic_virtual_handle
-zte_feature_mini_programe_add_gamespace
-zte_feature_mirror_projection_screen
-zte_feature_mtgpa_predownload
-zte_feature_multi_sub_screen
-zte_feature_neo_game_lib
-zte_feature_package_plugin_vibrate
-zte_feature_redmagic_gamekey
-zte_feature_redmagic_game_latency_data_switch
-zte_feature_redmagic_sports_handle
-zte_feature_redmagic_touch_gamekey
-zte_feature_redmagic_touch_gamekey_support_portrait
-zte_feature_redmagic_x_gravity_gamepad
-zte_feature_refresh_rate_lite_option_mode
-zte_feature_screen_key_map
-zte_feature_sensor_operation_touch
-zte_feature_stream_game
-zte_feature_support_charge_separation
-zte_feature_windowreply_entrance_display
-zte_feature_zperf_cube_gpsetting_enabled
-zte_feature_leia_3d_uart
-zte_feature_shoulder_key_launch_gamespace
-zte_feature_side_shortcut_key
-zte_feature_display_magic
-zte_feature_base_game_plugin_game
-zte_feature_game_center_menu
-zte_feature_game_center_mode_settings
-zte_feature_game_center_net
-zte_feature_game_center_not_disturb
-zte_feature_game_center_other_options
-zte_feature_game_center_screen_settings
-zte_feature_game_center_streaming
-zte_feature_game_center_flase_touch
-zte_feature_game_center_zte_flase_touch
-zte_feature_game_center_race_key_off
-zte_feature_game_center_about
-zte_feature_game_controlpanel_menu
-zte_feature_game_controlpanel_adjust_operation
-zte_feature_game_high_lights
-zte_feature_game_precision_control
-zte_feature_gamespace_config
-zte_feature_planet_agent
-zte_feature_planet_mora
-zte_feature_planet_resource_lib
-zte_feature_planet_video_banner
-zte_feature_redmagic_aikey
-zte_feature_redmagic_pc_game
-zte_feature_lobby_score_record
-zte_feature_liquid_cooling
-zte_feature_magic_resolutions
-zte_feature_manual_record_only
-zte_feature_tp_game_partition
-zte_feature_support_mipmap_lod
-zte_feature_use_gpu_driver_update
-zte_feature_sar_control_4
+echo "=== Game Space Unleashed v2.2.0 Diagnostic ===" > "$LOG"
+echo "Date: $(date)" >> "$LOG"
+echo "Device: $(getprop ro.product.model) ($(getprop ro.product.brand))" >> "$LOG"
+echo "Android: $(getprop ro.build.version.release) (SDK $(getprop ro.build.version.sdk))" >> "$LOG"
+echo "ROM: $(getprop ro.build.display.id)" >> "$LOG"
+echo "" >> "$LOG"
+
+# Check if our properties are actually set
+echo "=== ZTE Feature Properties (should all be 'true') ===" >> "$LOG"
+CRITICAL_PROPS="
+ro.vendor.feature.zte_feature_red_magic
+ro.vendor.feature.zte_feature_red_magic_phone
+ro.vendor.feature.zte_feature_magic_game_assist
+ro.vendor.feature.zte_feature_gfrc
+ro.vendor.feature.zte_feature_magic_super_resolution
+ro.vendor.feature.zte_feature_gamespace_config
+ro.vendor.feature.zte_feature_side_shortcut_key
+ro.vendor.feature.zte_feature_shoulder_key_launch_gamespace
+ro.vendor.feature.zte_feature_game_fan
+ro.vendor.feature.zte_feature_colorful_light
+ro.vendor.feature.zte_feature_low_sugar
+ro.vendor.feature.zte_feature_multi_sub_screen
+ro.vendor.feature.zte_feature_magic_virtual_handle
+ro.vendor.feature.zte_feature_windowreply_entrance_display
+ro.vendor.feature.mfv_feature_windowreply
+ro.vendor.feature.zte_feature_redmagic_touch_gamekey
+ro.vendor.feature.zte_feature_screen_key_map
+ro.vendor.feature.zte_feature_key_mouse_map
+ro.vendor.feature.zte_feature_game_center_menu
+ro.vendor.feature.zte_feature_game_center_other_options
 "
-
-for feature in $ZTE_FEATURES; do
-    resetprop "ro.vendor.feature.${feature}" "true"
+for prop in $CRITICAL_PROPS; do
+    val=$(getprop "$prop")
+    if [ "$val" = "true" ]; then
+        echo "  ✓ $prop = $val" >> "$LOG"
+    else
+        echo "  ✗ $prop = '$val' (EXPECTED 'true')" >> "$LOG"
+    fi
 done
-log -t "GSU" "Set $(echo "$ZTE_FEATURES" | wc -w) ZTE feature properties to true"
+
+echo "" >> "$LOG"
+echo "=== All ro.vendor.feature.zte_feature_* properties ===" >> "$LOG"
+getprop | grep "ro.vendor.feature.zte_feature" >> "$LOG" 2>/dev/null
+echo "" >> "$LOG"
+
+# Search for ZTE feature config files
+echo "=== ZTE Feature Config Files ===" >> "$LOG"
+for dir in /system/etc /vendor/etc /product/etc /my_product/etc /odm/etc /system_ext/etc; do
+    if [ -d "$dir" ]; then
+        found=$(find "$dir" -maxdepth 3 -name "*feature*" -o -name "*Feature*" 2>/dev/null)
+        if [ -n "$found" ]; then
+            echo "  Found in $dir:" >> "$LOG"
+            echo "$found" | while read f; do
+                echo "    $f ($(ls -la "$f" 2>/dev/null | awk '{print $5}') bytes)" >> "$LOG"
+            done
+        fi
+    fi
+done
+echo "" >> "$LOG"
+
+# Check GameAssist/GameSpace installation
+echo "=== App Installation ===" >> "$LOG"
+if [ -d "/system/app/GameAssist" ]; then
+    echo "  ✓ GameAssist: /system/app/GameAssist" >> "$LOG"
+    ls -la /system/app/GameAssist/*.apk >> "$LOG" 2>/dev/null
+else
+    echo "  ✗ GameAssist NOT found at /system/app/GameAssist" >> "$LOG"
+fi
+if [ -d "/system/priv-app/GameSpace" ]; then
+    echo "  ✓ GameSpace: /system/priv-app/GameSpace" >> "$LOG"
+    ls -la /system/priv-app/GameSpace/*.apk >> "$LOG" 2>/dev/null
+else
+    echo "  ✗ GameSpace NOT found at /system/priv-app/GameSpace" >> "$LOG"
+fi
+echo "" >> "$LOG"
+
+# Dump ZTE framework info
+echo "=== ZTE Framework ===" >> "$LOG"
+for jar in /system/framework/*zte* /system/framework/*nubia* /system/framework/*feature*; do
+    if [ -f "$jar" ]; then
+        echo "  Found: $jar ($(ls -la "$jar" | awk '{print $5}') bytes)" >> "$LOG"
+    fi
+done
+echo "" >> "$LOG"
+
+log -t "GSU" "Diagnostic saved to $LOG"
 
 # ====================================================================
-# 2. Enable GFRC (Game Frame Rate Control / R3 Chip) hardware features
+# 2. GFRC (Game Frame Rate Control / R3 Chip) runtime properties
+#    These are non-ro. properties that can be set at any time
 # ====================================================================
+
 resetprop vendor.gpp.gfrc.upscale.ratio 1
 resetprop vendor.gpp.gfrc.interp.rate 1
 resetprop persist.magic.super.resolution 1
 resetprop persist.vendor.gfrc.enable 1
 resetprop vendor.gpp.gfrc.enable 1
-log -t "GSU" "R3 chip properties set"
+log -t "GSU" "R3 chip GFRC runtime properties set"
 
 # ====================================================================
-# 3. Enable ALL plugins via Settings.Global
-#    PluginConfig.k() reads: Settings.Global["game_assist_enable_plugin_{name}"]
-#    Value 1 = enabled
-# ====================================================================
-
-PLUGINS="
-super_resolution
-super_resolution_old
-ai_trigger
-ai_detect
-ai_tip
-biablo_mode
-card_assist
-chat_assit
-combat_power
-counter
-custome_sort
-fan
-game_prediction
-gameshader
-high_sensitivity_wheel
-hunting_mode
-investigation_mode
-keyposition_assist
-mora_ai_speaker
-operation_devices
-pleased_display
-range_line
-redmagic_broadcast
-screen_extraction
-sensor_operation
-sight_assist
-sound_effect
-timer
-vibrate
-voice_controller
-active_mode
-afk
-barrage_message
-charge_separation
-clean
-competition_light
-dock
-game_benefit
-game_bilibili
-game_browser
-game_custom
-game_douyin
-game_kuaishou
-game_qq
-game_reminder
-game_wechat
-handle
-help
-image_search
-keylink
-link_mics_translation
-liquid_cool
-low_sugar
-manual_record
-mis_operate
-multi_sub_screen
-noti
-performance_monitor
-quit
-record
-refreshrate
-rotaton_lock
-small_window
-snap
-tel
-virtual_handle
-voice
-whatsapp
-wifi
-wifidisplay
-"
-
-for plugin in $PLUGINS; do
-    settings put global "game_assist_enable_plugin_${plugin}" 1
-done
-log -t "GSU" "Enabled $(echo "$PLUGINS" | wc -w) plugins via Settings.Global"
-
-# ====================================================================
-# 4. Enable GFRC mode for all running games via Settings.Global
+# 3. Enable GFRC mode for popular games via Settings.Global
 #    Format: "pkg+XYZ" where X=image quality, Y=frame rate, Z=master switch
 #    Value "111" = all enabled
 # ====================================================================
 
-# Set a wildcard-style entry to enable for common games
 GFRC_PACKAGES="
 com.miHoYo.Yuanshen
 com.miHoYo.GenshinImpact
@@ -272,4 +155,19 @@ done
 settings put global game_gfrc_mode "$GFRC_VALUE"
 log -t "GSU" "Set GFRC mode for $(echo "$GFRC_PACKAGES" | wc -w) games"
 
-log -t "GSU" "Game Space Unleashed: All features unlocked! ✓"
+# ====================================================================
+# 4. Verify Settings.Global values in diagnostic
+# ====================================================================
+
+echo "=== Settings.Global (GFRC) ===" >> "$LOG"
+gfrc_val=$(settings get global game_gfrc_mode 2>/dev/null)
+echo "  game_gfrc_mode = ${gfrc_val:-'(not set)'}" >> "$LOG"
+echo "" >> "$LOG"
+
+echo "=== Done ===" >> "$LOG"
+echo "If features are NOT unlocked, check:" >> "$LOG"
+echo "  1. Are all ✓ marks above showing 'true'?" >> "$LOG"
+echo "  2. Are there any ZTE feature config files found?" >> "$LOG"
+echo "  3. Share this file with the developer for analysis" >> "$LOG"
+
+log -t "GSU" "Game Space Unleashed v2.2.0: Setup complete! ✓"

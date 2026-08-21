@@ -6,14 +6,14 @@ SKIPUNZIP=0
 
 ui_print "╔══════════════════════════════════════╗"
 ui_print "║   Game Space Unleashed by MsysteM    ║"
-ui_print "║            v2.1.0                     ║"
+ui_print "║            v2.2.0                     ║"
 ui_print "╚══════════════════════════════════════╝"
 ui_print ""
-ui_print "→ Property-based feature unlock"
+ui_print "→ Early-boot property injection"
+ui_print "  ✓ system.prop: 100+ ZTE features set before zygote"
+ui_print "  ✓ post-fs-data.sh: critical overrides before apps"
+ui_print "  ✓ service.sh: GFRC runtime + diagnostics"
 ui_print "  ✓ No APK replacement — original apps intact"
-ui_print "  ✓ All ZTE feature flags via system properties"
-ui_print "  ✓ All plugins enabled via Settings.Global"
-ui_print "  ✓ R3 chip GFRC features enabled"
 ui_print ""
 
 # Check if this is a RedMagic device
@@ -44,16 +44,20 @@ rm -rf "$MODPATH/system/app/GameAssist" 2>/dev/null
 rm -rf "$MODPATH/system/priv-app/GameSpace" 2>/dev/null
 rm -rf "$MODPATH/system" 2>/dev/null
 
-# Set permissions for service.sh
+# Set permissions
 set_perm_recursive $MODPATH 0 0 0755 0644
 set_perm $MODPATH/service.sh 0 0 0755
+set_perm $MODPATH/post-fs-data.sh 0 0 0755
 
 ui_print ""
 ui_print "✓ Installation complete!"
 ui_print "→ Reboot to activate."
 ui_print "→ After reboot, open any game in Game Space"
-ui_print "  and ALL features will be available!"
+ui_print "  and ALL features should be available!"
 ui_print ""
-ui_print "Note: Features are enabled via system properties."
-ui_print "Original GameAssist/GameSpace APKs are NOT modified."
+ui_print "→ Diagnostic log: /sdcard/GSU_diagnostic.log"
+ui_print "  (created after first boot with module active)"
+ui_print ""
+ui_print "v2.2.0 FIX: Properties now set BEFORE apps start"
+ui_print "  (v2.1.0 set them too late — after GameAssist cached)"
 ui_print ""

@@ -29,6 +29,8 @@ jobs:
           cp module/module.prop build/module/
           cp module/customize.sh build/module/
           cp module/service.sh build/module/
+          cp module/post-fs-data.sh build/module/
+          cp module/system.prop build/module/
           cp module/uninstall.sh build/module/
           cp module/META-INF/com/google/android/update-binary build/module/META-INF/com/google/android/
           cp module/META-INF/com/google/android/updater-script build/module/META-INF/com/google/android/
@@ -70,21 +72,21 @@ jobs:
             Magisk module to unlock **ALL** Game Space features on RedMagic devices.
             No LSPosed required — no APK replacement — pure system property approach.
 
-            ### What's New in v2.1.0
-            - 🔧 **Complete rewrite**: property-only approach, NO APK replacement
+            ### What's New in v2.2.0
+            - 🔧 **FIXED**: Properties now set BEFORE apps start (was too late in v2.1.0)
+            - ✅ `system.prop`: 100+ ZTE features injected at early boot
+            - ✅ `post-fs-data.sh`: critical overrides before zygote starts
+            - ✅ `service.sh`: GFRC runtime props + diagnostic logging
             - ✅ Original GameAssist & GameSpace APKs stay untouched
-            - ✅ All signature-level permissions preserved (overlay, system windows)
-            - ✅ 100+ ZTE feature properties set to true
-            - ✅ All 70+ plugins enabled via Settings.Global
-            - ✅ R3 chip GFRC properties enabled
-            - ✅ GFRC mode pre-configured for popular games
-            - 📦 Tiny module size (~5KB vs 280MB)
+            - ✅ All signature-level permissions preserved
+            - 📋 Diagnostic log at `/sdcard/GSU_diagnostic.log`
 
-            ### How It Works
-            Unlike v2.0.x which replaced system APKs (breaking overlay permissions),
-            v2.1.0 sets the system properties and Settings.Global values that
-            GameAssist and GameSpace READ to determine feature availability.
-            Original APKs stay intact with their platform signature.
+            ### Why v2.1.0 Didn't Work
+            v2.1.0 set properties in `service.sh` (after boot complete), but
+            GameAssist/GameSpace cache ZTE feature values in static initializers
+            during zygote startup — long before `service.sh` runs.
+            v2.2.0 uses `system.prop` + `post-fs-data.sh` to inject properties
+            BEFORE any Java process starts.
 
             ### Unlocked Features
             - ⚡ Super Resolution / Superior Pic Quality
@@ -93,22 +95,24 @@ jobs:
             - 🤖 Sound Equalizer, 4D Vibrate, Voice Controller
             - 📊 Game Prediction, Combat Power, AI Tips
             - ⚙️ 100+ ZTE feature flags force-enabled
-            - 🎯 All 70+ sidebar plugins enabled
+            - 🎯 All sidebar tiles & plugins unlocked
+            - ⚙️ Game Center settings fully accessible
 
             ### Requirements
             - RedMagic device with Game Space
-            - Magisk v20.4+
+            - Magisk v20.4+ or KernelSU
 
             ### Installation
-            1. **Remove v2.0.x first** if installed (Magisk → Modules → Remove)
-            2. Download `GameSpaceUnleashed-${{ steps.version.outputs.version }}.zip`
-            3. Magisk → Modules → Install from storage
-            4. Reboot
-            5. Open any game → features should be available!
+            1. Download `GameSpaceUnleashed-${{ steps.version.outputs.version }}.zip`
+            2. Magisk → Modules → Install from storage
+            3. Reboot
+            4. Open any game → features should be available!
+            5. Check `/sdcard/GSU_diagnostic.log` to verify
 
-            ### Upgrade from v2.0.x
-            If v2.0.x broke your Game Space, removing it and rebooting will
-            restore the original apps. Then install v2.1.0.
+            ### Troubleshooting
+            After reboot, check `/sdcard/GSU_diagnostic.log`.
+            All critical properties should show ✓ with value `true`.
+            Share the log file if features still aren't unlocked.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
