@@ -82,6 +82,7 @@ jobs:
           mkdir -p build/module/zygisk
           mkdir -p build/module/webroot
           mkdir -p build/module/dex
+          mkdir -p build/module/META-INF/com/google/android
 
           # Copy module files
           cp module/module.prop build/module/
@@ -91,6 +92,8 @@ jobs:
           cp module/uninstall.sh build/module/
           cp module/config.json build/module/
           cp -r module/webroot/* build/module/webroot/
+          cp module/META-INF/com/google/android/update-binary build/module/META-INF/com/google/android/
+          cp module/META-INF/com/google/android/updater-script build/module/META-INF/com/google/android/
 
           # Copy native library (rename to arm64-v8a.so for Zygisk)
           cp native/build/lib/arm64-v8a/libgame_space_unleashed.so build/module/zygisk/arm64-v8a.so
