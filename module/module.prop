@@ -1,7 +1,7 @@
 id=game_space_unleashed
 name=Game Space Unleashed by MsysteM
-version=v3.0.0
-versionCode=300
+version=v3.0.1
+versionCode=301
 author=MsysteM
 description=Unlock ALL Game Space features for ALL games — GFRC, all plugins, all AI features unlocked.
 updateJson=https://raw.githubusercontent.com/JueN-Sar/GameSpaceUnleashed/main/update.json

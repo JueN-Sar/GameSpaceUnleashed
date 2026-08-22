@@ -1,5 +1,5 @@
 #!/system/bin/sh
-# Game Space Unleashed v3.0.0 by MsysteM — Boot Service
+# Game Space Unleashed v3.0.1 by MsysteM — Boot Service
 # Runs AFTER boot completes (sys.boot_completed=1).
 
 MODDIR="${0%/*}"
@@ -11,7 +11,7 @@ while [ "$(getprop sys.boot_completed)" != "1" ]; do
 done
 sleep 5
 
-log -t "GSU" "Game Space Unleashed v3.0.0: Starting..."
+log -t "GSU" "Game Space Unleashed v3.0.1: Starting..."
 
 # ====================================================================
 # 1. Plugin whitelists — "." matches ALL package names via contains()
@@ -207,7 +207,7 @@ log -t "GSU" "Set GFRC mode for $(echo "$GFRC_PACKAGES" | wc -w) games"
 # 6. Diagnostic log
 # ====================================================================
 
-echo "=== Game Space Unleashed v3.0.0 ===" > "$LOG"
+echo "=== Game Space Unleashed v3.0.1 ===" > "$LOG"
 echo "Date: $(date)" >> "$LOG"
 echo "Device: $(getprop ro.product.model) ($(getprop ro.product.brand))" >> "$LOG"
 echo "ROM: $(getprop ro.build.display.id)" >> "$LOG"
@@ -245,4 +245,4 @@ for plugin in super_resolution voice_controller ai_tip link_mics_translation; do
 done
 
 log -t "GSU" "Diagnostic saved to $LOG"
-log -t "GSU" "Game Space Unleashed v3.0.0: Done ✓"
+log -t "GSU" "Game Space Unleashed v3.0.1: Done ✓"

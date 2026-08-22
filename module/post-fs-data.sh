@@ -1,5 +1,5 @@
 #!/system/bin/sh
-# Game Space Unleashed v3.0.0 by MsysteM — Early Boot
+# Game Space Unleashed v3.0.1 by MsysteM — Early Boot
 # Runs BEFORE zygote starts. Uses resetprop to set/override ro.* properties.
 
 MODDIR="${0%/*}"
