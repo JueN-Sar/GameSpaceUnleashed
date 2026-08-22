@@ -1,0 +1,2576 @@
+<title>GameAssist Deep Dive</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap">
+<style>
+:root {
+  --bg: #0F1023;
+  --bg-raised: #161830;
+  --bg-code: #1A1A2E;
+  --bg-code-header: #232340;
+  --text: #C4C1D8;
+  --text-bright: #EDEAF5;
+  --text-muted: #7E7A96;
+  --accent: #E53945;
+  --accent-dim: rgba(229,57,69,0.15);
+  --teal: #2BBCB3;
+  --teal-dim: rgba(43,188,179,0.12);
+  --amber: #E8A838;
+  --amber-dim: rgba(232,168,56,0.12);
+  --border: #2A2844;
+  --border-light: #3A3760;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #F5F4F8;
+    --bg-raised: #FFFFFF;
+    --bg-code: #F0EEF5;
+    --bg-code-header: #E4E1ED;
+    --text: #3D3956;
+    --text-bright: #1A1730;
+    --text-muted: #8886A0;
+    --accent: #D4303C;
+    --accent-dim: rgba(212,48,60,0.08);
+    --teal: #1A9E96;
+    --teal-dim: rgba(26,158,150,0.08);
+    --amber: #C48A20;
+    --amber-dim: rgba(196,138,32,0.08);
+    --border: #D8D5E2;
+    --border-light: #C8C4D6;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F1023;
+  --bg-raised: #161830;
+  --bg-code: #1A1A2E;
+  --bg-code-header: #232340;
+  --text: #C4C1D8;
+  --text-bright: #EDEAF5;
+  --text-muted: #7E7A96;
+  --accent: #E53945;
+  --accent-dim: rgba(229,57,69,0.15);
+  --teal: #2BBCB3;
+  --teal-dim: rgba(43,188,179,0.12);
+  --amber: #E8A838;
+  --amber-dim: rgba(232,168,56,0.12);
+  --border: #2A2844;
+  --border-light: #3A3760;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', system-ui, sans-serif;
+  line-height: 1.65;
+  font-size: 15px;
+  -webkit-font-smoothing: antialiased;
+}
+
+.top-bar {
+  position: sticky; top: 0; z-index: 100;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  padding: 0 24px;
+  display: flex; align-items: center; gap: 24px;
+  height: 52px;
+  backdrop-filter: blur(12px);
+}
+.top-bar .logo {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700; font-size: 14px;
+  color: var(--accent);
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+.top-bar nav { display: flex; gap: 4px; overflow-x: auto; }
+.top-bar nav a {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px; font-weight: 500;
+  color: var(--text-muted);
+  text-decoration: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+.top-bar nav a:hover { color: var(--text-bright); background: var(--accent-dim); }
+.top-bar nav a.teal:hover { background: var(--teal-dim); color: var(--teal); }
+.top-bar nav a.amber:hover { background: var(--amber-dim); color: var(--amber); }
+
+.container { max-width: 1100px; margin: 0 auto; padding: 32px 24px 80px; }
+
+h1 {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 28px; font-weight: 700;
+  color: var(--text-bright);
+  margin-bottom: 8px;
+}
+.subtitle {
+  font-size: 14px; color: var(--text-muted);
+  margin-bottom: 32px;
+}
+.subtitle code {
+  font-family: 'JetBrains Mono', monospace;
+  background: var(--bg-code);
+  padding: 2px 6px; border-radius: 4px;
+  font-size: 12px; color: var(--text);
+}
+
+.section {
+  margin-bottom: 48px;
+  scroll-margin-top: 64px;
+}
+.section-header {
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid var(--border);
+}
+.section-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px; font-weight: 700;
+  color: var(--bg);
+  background: var(--accent);
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+.section-num.teal { background: var(--teal); }
+.section-num.amber { background: var(--amber); }
+.section-title {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 18px; font-weight: 600;
+  color: var(--text-bright);
+}
+
+.card {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+.card h3 {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px; font-weight: 600;
+  color: var(--text-bright);
+  margin-bottom: 12px;
+}
+.card p { margin-bottom: 10px; }
+
+.badge {
+  display: inline-block;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; font-weight: 600;
+  padding: 3px 8px; border-radius: 4px;
+  letter-spacing: 0.3px;
+}
+.badge-red { background: var(--accent-dim); color: var(--accent); }
+.badge-teal { background: var(--teal-dim); color: var(--teal); }
+.badge-amber { background: var(--amber-dim); color: var(--amber); }
+.badge-muted { background: var(--border); color: var(--text-muted); }
+
+.flow {
+  display: flex; align-items: center; gap: 8px;
+  flex-wrap: wrap;
+  margin: 12px 0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+}
+.flow-step {
+  background: var(--bg-code);
+  border: 1px solid var(--border);
+  padding: 6px 12px;
+  border-radius: 6px;
+  color: var(--text);
+}
+.flow-arrow { color: var(--text-muted); font-size: 16px; }
+.flow-step.active { border-color: var(--accent); color: var(--accent); }
+.flow-step.teal-active { border-color: var(--teal); color: var(--teal); }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+table th {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  text-align: left;
+  padding: 8px 12px;
+  border-bottom: 2px solid var(--border);
+  white-space: nowrap;
+}
+table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  vertical-align: top;
+}
+table tr:last-child td { border-bottom: none; }
+.table-wrap { overflow-x: auto; border-radius: 8px; border: 1px solid var(--border); }
+table code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  background: var(--bg-code);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+details {
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+details summary {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px; font-weight: 500;
+  color: var(--text-muted);
+  padding: 10px 14px;
+  background: var(--bg-code-header);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  display: flex; align-items: center; gap: 8px;
+}
+details summary::before {
+  content: '▸'; display: inline-block;
+  transition: transform 0.15s;
+  color: var(--text-muted);
+}
+details[open] summary::before { transform: rotate(90deg); }
+details summary .filepath {
+  color: var(--text);
+  margin-left: auto;
+  font-size: 11px;
+}
+details pre {
+  margin: 0;
+  padding: 16px;
+  background: var(--bg-code);
+  overflow-x: auto;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text);
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+.key-val {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 16px;
+  font-size: 13px;
+  margin: 8px 0;
+}
+.key-val dt {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.key-val dd { color: var(--text); }
+
+.callout {
+  display: flex; gap: 12px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  margin: 12px 0;
+  font-size: 13px;
+}
+.callout-red { background: var(--accent-dim); border-left: 3px solid var(--accent); }
+.callout-teal { background: var(--teal-dim); border-left: 3px solid var(--teal); }
+.callout-amber { background: var(--amber-dim); border-left: 3px solid var(--amber); }
+.callout strong { color: var(--text-bright); }
+
+.model-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+.model-card {
+  background: var(--bg-code);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+.model-card h4 {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px; font-weight: 600;
+  color: var(--teal);
+  margin-bottom: 6px;
+}
+.model-card .meta {
+  font-size: 12px; color: var(--text-muted);
+  line-height: 1.5;
+}
+
+@media (max-width: 700px) {
+  .top-bar { padding: 0 12px; gap: 12px; }
+  .container { padding: 20px 14px 60px; }
+  h1 { font-size: 22px; }
+  .model-grid { grid-template-columns: 1fr; }
+}
+</style>
+
+<div class="top-bar">
+  <span class="logo">GAMEASSIST // NX789J</span>
+  <nav>
+    <a href="#sound">01 Sound Effect</a>
+    <a href="#plugins" class="amber">02 Plugin Gates</a>
+    <a href="#ai" class="teal">03 AI Features</a>
+    <a href="#registry">Registry</a>
+    <a href="#source">Source</a>
+  </nav>
+</div>
+
+<div class="container">
+
+<h1>GameAssist APK — Deep Dive</h1>
+<p class="subtitle">
+  RedMagic 10 Pro (NX789J) · V11.0.05MR1 · <code>/system/app/GameAssist/GameAssist.apk</code> · 121 MB · 14,762 classes
+</p>
+
+<!-- =========================================================
+     SECTION 1 — SOUND EFFECT
+     ========================================================= -->
+<div class="section" id="sound">
+  <div class="section-header">
+    <span class="section-num">1</span>
+    <span class="section-title">Sound Effect Plugin — Runtime Block</span>
+  </div>
+
+  <div class="card">
+    <h3>Tile Class: SoundEffectTile</h3>
+    <p>Mapped in <code>TileFactory</code> via <code>"sound_effect" → new SoundEffectTile(host)</code>.</p>
+
+    <div class="callout callout-red">
+      <div>
+        <strong>Runtime block chain:</strong> The sound_effect tile can be removed from the master list entirely before it ever reaches the UI. The gate is <code>Utils.F()</code>, called inside <code>Utils.d()</code>.
+      </div>
+    </div>
+
+    <h3>Visibility Gate: Utils.F()</h3>
+    <p>Returns <code>true</code> to <strong>hide</strong> the tile. Three sequential checks:</p>
+    <div class="flow">
+      <span class="flow-step active">ZteFeature.isSupportAudioEqualizer()</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-step">AudioManager.getParameters("isDtsGameEnhanceSupported=&lt;g2&gt;")</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-step">Utils.B() override</span>
+    </div>
+
+    <dl class="key-val">
+      <dt>Feature flag</dt>
+      <dd><code>ZTE_FEATURE_GAMEASSIST_AUDIO_EQUALIZER</code> — default <span class="badge badge-teal">TRUE</span></dd>
+      <dt>If flag false</dt>
+      <dd>F() returns true → <strong>tile removed</strong>, no further checks</dd>
+      <dt>DTS hardware check</dt>
+      <dd>Queries <code>AudioManager.getParameters("isDtsGameEnhanceSupported=&lt;pid&gt;")</code>. Expects <code>"isDtsGameEnhanceSupported=on"</code> for the tile to stay visible.</dd>
+      <dt>Override B()</dt>
+      <dd>A per-package override via <code>Utils.B(context, pid)</code> — if non-null, its boolean value takes precedence over the DTS hardware query.</dd>
+    </dl>
+
+    <h3>Equalizer Service Dispatch</h3>
+    <p>Once visible, the tile dispatches to <strong>two different equalizer services</strong> depending on a single feature flag:</p>
+
+    <div class="table-wrap">
+    <table>
+      <tr>
+        <th>ZteFeature.isDtsEqFloat()</th>
+        <th>Action</th>
+        <th>Package</th>
+        <th>Service</th>
+      </tr>
+      <tr>
+        <td><span class="badge badge-teal">true</span></td>
+        <td><code>cn.zte.intent.action.EQUALIZERSERVICE</code></td>
+        <td><code>cn.zte.gamefloat</code></td>
+        <td>ZTE's built-in equalizer</td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-muted">false</span></td>
+        <td><code>cn.nubia.intent.action.EQUALIZERSERVICE</code></td>
+        <td><code>com.dts.dtsxultra</code></td>
+        <td>DTS:X Ultra equalizer</td>
+      </tr>
+    </table>
+    </div>
+
+    <dl class="key-val" style="margin-top:12px">
+      <dt>Feature flag</dt>
+      <dd><code>ZTE_FEATURE_GAME_DTS_EQ_FLOAT</code> — default <code>false</code></dd>
+      <dt>State tracking</dt>
+      <dd><code>Settings.Global "game_equalizer_enable"</code> — 0 or 1</dd>
+      <dt>Intent extras</dt>
+      <dd><code>"packagename"</code> (game pkg), <code>"reason"</code> (0=settings, 6=open, 7=close), <code>"close_window"</code> (bool)</dd>
+    </dl>
+
+    <div class="callout callout-amber">
+      <div>
+        <strong>space_trigger = 3</strong> (both domestic + international) in default_plugin_config.xml. No whitelist/blacklist — available to all games once the runtime hardware check passes.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- =========================================================
+     SECTION 2 — MISSING PLUGINS
+     ========================================================= -->
+<div class="section" id="plugins">
+  <div class="section-header">
+    <span class="section-num amber">2</span>
+    <span class="section-title">Missing Right-Side Plugins — Feature Gates</span>
+  </div>
+
+  <div class="callout callout-amber">
+    <div>
+      <strong>Key finding:</strong> These five plugins are <strong>NOT</strong> in the <code>default_plugin_config.xml</code> / <code>redmagic_default_plugin_config.xml</code> files. They lack server-pushed space_trigger and whitelist/blacklist entries. Their visibility is controlled entirely through <code>ZteFeature</code> flags in <code>Utils.d()</code> and per-plugin <code>Settings.Global</code> keys.
+    </div>
+  </div>
+
+  <div class="table-wrap">
+  <table>
+    <tr>
+      <th>Plugin</th>
+      <th>Tile Class</th>
+      <th>ZteFeature Gate</th>
+      <th>Settings.Global Key</th>
+      <th>External Service</th>
+    </tr>
+    <tr>
+      <td><code>link_mics_translation</code></td>
+      <td><code>LinkMicsTranslationTile</code><br><span class="badge badge-muted">dessert/tiles</span></td>
+      <td><span class="badge badge-amber">NONE in Utils.d()</span><br>Not filtered by feature flag — always in list if present in <code>plugin_list_tiles</code></td>
+      <td><code>nubia_ai_translation_enabled_pkg</code></td>
+      <td><code>content://com.zte.aitranslation.contentProvider</code></td>
+    </tr>
+    <tr>
+      <td><code>barrage_message</code></td>
+      <td><code>BarrageMessageTiles</code><br><span class="badge badge-muted">dessert/tiles</span></td>
+      <td><span class="badge badge-amber">NONE in Utils.d()</span><br>Not filtered — always present</td>
+      <td><code>gsc_barrage_message</code></td>
+      <td>None — direct Settings.Global toggle</td>
+    </tr>
+    <tr>
+      <td><code>voice_controller</code></td>
+      <td><code>VoiceControllerTile</code><br><span class="badge badge-red">plugin/tiles</span></td>
+      <td><code>ZTE_FEATURE_GAMEASSIST_VOICE_CONTROLLER</code><br>default <code>false</code> — <strong>removed unless flag is true</strong></td>
+      <td><code>voice_controller_enabled_pkg</code></td>
+      <td><code>com.zte.onemorething</code><br>AudioRecordService</td>
+    </tr>
+    <tr>
+      <td><code>game_browser</code></td>
+      <td><code>GameThirdAppTitle</code><br><span class="badge badge-muted">dessert/tiles</span></td>
+      <td><span class="badge badge-amber">NONE in Utils.d()</span><br>Shared tile class for browser + bilibili + douyin + kuaishou + qq + wechat + whatsapp</td>
+      <td><code>pip_pkg</code></td>
+      <td>Launches <code>cn.nubia.browser</code> (RedMagic) or <code>com.ume.browser</code></td>
+    </tr>
+    <tr>
+      <td><code>low_sugar</code></td>
+      <td><code>LowSugarGameplayTile</code><br><span class="badge badge-muted">dessert/tiles</span></td>
+      <td><code>ZTE_FEATURE_LOW_SUGAR</code><br>default <code>false</code> — <strong>checked at runtime in k0()</strong>, not in Utils.d()</td>
+      <td><code>nubia_low_sugar_gameplay_pkg_open</code></td>
+      <td><code>LowSugarComService</code> via Router + <code>com.zte.aispeaker.contentProvider</code></td>
+    </tr>
+  </table>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h3>Master Plugin Visibility Pipeline</h3>
+    <p>Every plugin goes through a three-stage filter before appearing in the game sidebar:</p>
+
+    <div class="flow">
+      <span class="flow-step active">R.string.plugin_list_tiles</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-step active">Utils.d() — ZteFeature removal</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-step active">PluginConfig.l() — enable + space + whitelist</span>
+    </div>
+
+    <p style="margin-top:12px"><strong>Stage 1</strong>: <code>Utils.k()</code> reads <code>R.string.plugin_list_tiles</code> (a comma-separated list baked into the APK), parses it into an ArrayList.</p>
+    <p><strong>Stage 2</strong>: <code>Utils.d()</code> removes plugins whose ZteFeature flags are false. This is the hard gate — if your flag defaults to <code>false</code> and the device doesn't set it, the plugin is gone.</p>
+    <p><strong>Stage 3</strong>: <code>PluginConfig.l(context, pluginName, packageName)</code> applies the per-package check:</p>
+
+    <div class="flow" style="font-size:11px">
+      <span class="flow-step">k() enable?</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-step">super_resolution special?</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-step">space_trigger & region mask</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-step">whitelist match?</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-step">blacklist exclude?</span>
+    </div>
+
+    <dl class="key-val" style="margin-top:12px">
+      <dt>Region detection</dt>
+      <dd><code>PluginConfig.j()</code> = <code>!ZteFeature.IS_INTER_VERSION</code> = <code>!"abroad".equals(SystemProperties.get("ro.vendor.mifavor.custom", "home"))</code></dd>
+      <dt>Domestic mask</dt>
+      <dd><code>1</code> — space_trigger & 1 must be non-zero</dd>
+      <dt>International mask</dt>
+      <dd><code>2</code> — space_trigger & 2 must be non-zero</dd>
+      <dt>Default space_trigger</dt>
+      <dd><code>3</code> (both regions) — read from <code>Settings.Global "game_assist_trigger_space_" + pluginName</code></dd>
+    </dl>
+  </div>
+
+  <div class="card">
+    <h3>Per-Plugin Detail</h3>
+
+    <h3 style="color:var(--amber)">link_mics_translation</h3>
+    <p>Real-time voice translation during gaming. Communicates with <code>com.zte.aitranslation</code> via ContentProvider calls: <code>"switch_open"</code>, <code>"switch_close"</code>, <code>"GameUpdate"</code>. Sends the current game package name and user ID. Not gated by any ZteFeature flag — if it's in the <code>plugin_list_tiles</code> string resource, it appears. State tracked per-package via <code>nubia_ai_translation_enabled_pkg</code> (comma-separated list). AI agent commands: <code>game_turn_on_game_voice_translation</code>, <code>game_turn_off_game_voice_translation</code>.</p>
+
+    <h3 style="color:var(--amber)">barrage_message</h3>
+    <p>Danmaku/bullet-screen message overlay. The simplest tile in the entire APK — a pure Settings.Global toggle with zero external dependencies. Flips <code>gsc_barrage_message</code> between 0 and 1. No ZteFeature gate, no whitelist, no external service. Another system component reads the setting to display the overlay.</p>
+
+    <h3 style="color:var(--accent)">voice_controller</h3>
+    <p><strong>Hard-gated</strong> by <code>ZTE_FEATURE_GAMEASSIST_VOICE_CONTROLLER</code> (default false) in Utils.d(). Sends intents to <code>com.zte.onemorething / com.zte.aispeaker.aigc.AudioRecordService</code> with three actions:</p>
+    <ul style="margin:8px 0 8px 20px;font-size:13px">
+      <li><code>com.zte.onemorething.action.START_ASR</code> — start speech recognition</li>
+      <li><code>com.zte.onemorething.action.STOP_ASR</code> — stop recognition</li>
+      <li><code>com.zte.onemorething.action.EDIT_VOICE_CONTROLLER</code> — open settings</li>
+    </ul>
+    <p>Coordinates with <code>GameVoiceController</code> policy class. Per-package state in <code>voice_controller_enabled_pkg</code>.</p>
+
+    <h3 style="color:var(--amber)">game_browser</h3>
+    <p>Uses <code>GameThirdAppTitle</code> — a generic tile class shared across 7+ plugins (game_bilibili, game_douyin, game_kuaishou, game_qq, game_wechat, game_whatsapp). It's a quick-launch button that opens the third-party app in a floating window. The specific package is resolved from the plugin name via <code>TilesUtil.l()</code>. For "game_browser", it launches <code>cn.nubia.browser</code> (RedMagic) or <code>com.ume.browser</code> (ZTE/other) determined by <code>ZteFeature.getBrowserPackage()</code>. Supports dual-app detection (WeChat/QQ clones). No ZteFeature gate in Utils.d() — always present.</p>
+
+    <h3 style="color:var(--accent)">low_sugar</h3>
+    <p>Low-sugar gameplay mode — appears to be a fatigue/health monitoring feature. Uses <code>LowSugarComService</code> via Router pattern. The ZteFeature check <code>ZTE_FEATURE_LOW_SUGAR</code> (default false) is <strong>not</strong> in Utils.d() but is checked inside the tile's own <code>k0()</code> (AI agent command handler) before processing voice commands. Monitors <code>com.zte.aispeaker.contentProvider</code> for AIGC user login state — requires cloud AI account login. State in <code>nubia_low_sugar_gameplay_pkg_open</code>. Checks <code>nubia_account_login_status</code> for auth.</p>
+  </div>
+</div>
+
+<!-- =========================================================
+     SECTION 3 — AI FEATURES
+     ========================================================= -->
+<div class="section" id="ai">
+  <div class="section-header">
+    <span class="section-num teal">3</span>
+    <span class="section-title">AI Features — Online vs Local</span>
+  </div>
+
+  <div class="callout callout-teal">
+    <div>
+      <strong>All core inference is LOCAL.</strong> No HTTP client, Retrofit, OkHttp, or network-calling code found in any AI-related class within GameAssist. The APK bundles NCNN (Tencent's neural network framework) for YOLOX object detection and Google ML Kit for OCR, both running entirely on-device. Heavy features (ai_tip, game_prediction) are delegated to <code>cn.zte.gamefloat</code> — a separate system service APK.
+    </div>
+  </div>
+
+  <div class="table-wrap">
+  <table>
+    <tr>
+      <th>Feature</th>
+      <th>ML Stack</th>
+      <th>Model Files</th>
+      <th>Network?</th>
+      <th>Delegate To</th>
+    </tr>
+    <tr>
+      <td><code>ai_detect</code></td>
+      <td><span class="badge badge-teal">NCNN + YOLOX</span></td>
+      <td>Loaded dynamically per game from <code>assets/yolox/</code></td>
+      <td><span class="badge badge-teal">LOCAL</span></td>
+      <td>In-process native (<code>libyoloXncnn.so</code>)</td>
+    </tr>
+    <tr>
+      <td><code>ai_tip</code></td>
+      <td>Unknown (delegated)</td>
+      <td>In <code>cn.zte.gamefloat</code></td>
+      <td><span class="badge badge-teal">LOCAL</span></td>
+      <td><code>cn.zte.gamefloat</code> — <code>cn.zte.gamefloat.ai.tip</code></td>
+    </tr>
+    <tr>
+      <td><code>game_prediction</code></td>
+      <td>Unknown (delegated)</td>
+      <td>In <code>cn.zte.gamefloat</code></td>
+      <td><span class="badge badge-teal">LOCAL</span></td>
+      <td><code>cn.zte.gamefloat.wrp.WinRatePredictionService</code></td>
+    </tr>
+    <tr>
+      <td><code>tactical_coach</code></td>
+      <td colspan="4">Same as <code>ai_tip</code> — renamed label on SDK ≥ 36. Neo variant: <code>plugin_neo_ai_tip_coach</code></td>
+    </tr>
+    <tr>
+      <td><code>hunting_mode</code></td>
+      <td><span class="badge badge-muted">No ML</span></td>
+      <td>—</td>
+      <td><span class="badge badge-teal">LOCAL</span></td>
+      <td>Display color filter via broadcast <code>cn.nubia.intent.action.game_color_invert</code></td>
+    </tr>
+    <tr>
+      <td>Skill Release</td>
+      <td><span class="badge badge-teal">NCNN</span></td>
+      <td><code>assets/skill_release.param</code> + <code>.bin</code></td>
+      <td><span class="badge badge-teal">LOCAL</span></td>
+      <td>In-process native (<code>libyoloXncnn.so</code>)</td>
+    </tr>
+    <tr>
+      <td>4D Vibration</td>
+      <td><span class="badge badge-teal">NCNN</span></td>
+      <td><code>assets/vibrate.param</code> + <code>.bin</code></td>
+      <td><span class="badge badge-teal">LOCAL</span></td>
+      <td>In-process native</td>
+    </tr>
+    <tr>
+      <td>Low Sugar YOLOX</td>
+      <td><span class="badge badge-teal">NCNN + YOLOX</span></td>
+      <td><code>assets/yolox/lowsugar/lowsugar.param</code> + <code>.bin</code></td>
+      <td><span class="badge badge-teal">LOCAL</span></td>
+      <td>In-process native</td>
+    </tr>
+    <tr>
+      <td>Image Search / OCR</td>
+      <td><span class="badge badge-teal">Google ML Kit</span></td>
+      <td><code>assets/mlkit-google-ocr-models/</code> (TFLite)</td>
+      <td><span class="badge badge-teal">LOCAL</span></td>
+      <td>Bundled ML Kit (no Play Services needed)</td>
+    </tr>
+  </table>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h3>NCNN + YOLOX — Object Detection Engine</h3>
+    <p>The core AI detect system uses <strong>YOLOX</strong> (a real-time object detection model from Megvii/FAIR) running on <strong>NCNN</strong> (Tencent's lightweight neural network inference framework optimized for mobile). The native library <code>libyoloXncnn.so</code> is loaded once.</p>
+
+    <dl class="key-val">
+      <dt>Java wrapper</dt>
+      <dd><code>cn.nubia.yolox.YOLOXncnn</code></dd>
+      <dt>Native methods</dt>
+      <dd><code>init(AssetManager, paramFile, binFile)</code>, <code>detect(Bitmap, flip, classNames[])</code>, <code>releaseXncnn()</code></dd>
+      <dt>Model format</dt>
+      <dd>NCNN's own <code>.param</code> + <code>.bin</code> pair (not ONNX, not TFLite)</dd>
+      <dt>Class names</dt>
+      <dd>Passed at construction time — model is trained per-game with game-specific class labels</dd>
+      <dt>Output</dt>
+      <dd>Array of <code>Obj{x, y, w, h, label, prob}</code> — bounding boxes with confidence</dd>
+    </dl>
+
+    <p style="margin-top:10px">The <code>YOLOXWindow</code> class renders bounding boxes as a system overlay (window type 2038, click-through). Display is controlled by <code>Settings.Global "yolox_rect_show"</code>. 19 distinct colors for different classes.</p>
+  </div>
+
+  <div class="card">
+    <h3>Bundled Model Files</h3>
+    <div class="model-grid">
+      <div class="model-card">
+        <h4>skill_release</h4>
+        <div class="meta">
+          <code>assets/skill_release.param</code><br>
+          <code>assets/skill_release.bin</code><br>
+          Purpose: Detect optimal skill release timing in MOBAs<br>
+          Class: <code>SkillReleaseModel</code> — boolean <code>CanRelease(Bitmap)</code>
+        </div>
+      </div>
+      <div class="model-card">
+        <h4>vibrate</h4>
+        <div class="meta">
+          <code>assets/vibrate.param</code><br>
+          <code>assets/vibrate.bin</code><br>
+          Purpose: 4D haptic vibration scene detection<br>
+          Maps game visuals → vibration patterns
+        </div>
+      </div>
+      <div class="model-card">
+        <h4>lowsugar</h4>
+        <div class="meta">
+          <code>assets/yolox/lowsugar/lowsugar.param</code><br>
+          <code>assets/yolox/lowsugar/lowsugar.bin</code><br>
+          Purpose: Low-sugar gameplay task detection<br>
+          Identifies game objectives for health monitoring
+        </div>
+      </div>
+      <div class="model-card">
+        <h4>ML Kit OCR</h4>
+        <div class="meta">
+          <code>assets/mlkit-google-ocr-models/</code><br>
+          TFLite models: rpn_text_detector, script ID<br>
+          Recognizers: Latin, Chinese, Japanese, Korean, Bengali, Devanagari<br>
+          Used by image_search, likely game_prediction
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Per-Feature Detail</h3>
+
+    <h3 style="color:var(--teal)">ai_detect</h3>
+    <p>Real-time enemy/object detection overlay. <code>AiDetectTile</code> is a simple toggle that writes <code>Settings.Global "game_foot_ai_detect"</code> = 0 or 1. The actual YOLOX inference runs in a separate service that reads this setting. The tile itself has no direct model interaction — it just signals. Gate: removed by <code>Utils.G()</code> which returns true unless <code>ZteFeature.isSupportSoundProbe()</code> AND the current game is <code>com.tencent.tmgp.pubgmhd</code>. This means <strong>ai_detect only shows for PUBG Mobile (Chinese) when sound probe is enabled</strong> — a very narrow gate.</p>
+    <p>Whitelist from config XML: <code>pubgmhd, krmobile, ig, vng.pubgmobile, pubg.newstate, rekoo.pubgm</code> — all PUBG variants.</p>
+
+    <h3 style="color:var(--teal)">ai_tip / tactical_coach</h3>
+    <p>Strategic game advice delivered in real-time. <code>AITipTile</code> sends intents to <code>cn.zte.gamefloat</code> with action <code>cn.zte.gamefloat.ai.tip</code>. Events: <code>"open"</code>, <code>"close"</code>, <code>"set"</code> (edit settings), <code>"request_tip"</code>. Gate: <code>ZTE_FEATURE_GAME_AI_TIPS</code> (default false). Label dynamically changes on SDK ≥ 36 to "tactical coach". Per-package state in <code>game_ai_tip_enable_pkgs</code>.</p>
+    <p>Whitelists from config:<br>
+    <span class="badge badge-red">domestic</span> sgame, pubgmhd, lolm, Yuanshen, cf, cod, jkchess<br>
+    <span class="badge badge-amber">international</span> ig, freefiremax, freefireth, mobile.legends, proxima.dfm</p>
+
+    <h3 style="color:var(--teal)">game_prediction</h3>
+    <p>Win-rate prediction overlay. <code>GamePredictionTile</code> starts <code>cn.zte.gamefloat.wrp.WinRatePredictionService</code> with the current game package. Auto-starts 800ms after game launch if enabled. The win rate value is read from <code>Settings.Global "game_predication_value"</code> (float 0.0–1.0, displayed as percentage). Gate: <code>ZTE_FEATURE_AI_GAME_PREDICTION</code> (default false).</p>
+    <p>Whitelists from config:<br>
+    <span class="badge badge-red">domestic</span> sgame, lolm, cf, jkchess<br>
+    <span class="badge badge-amber">international</span> freefireth, freefiremax, mobile.legends</p>
+
+    <h3 style="color:var(--teal)">hunting_mode</h3>
+    <p><strong>Not an AI/ML feature</strong> — it's a display color filter. Sets <code>game_strengthen_mode_value</code> to 5 (hunting = mode 5) and broadcasts <code>cn.nubia.intent.action.game_color_invert</code>. Extends <code>FloatButtonQSTile</code> for a floating toggle button overlay. If <code>ZteFeature.isSupportGameDisplayFilterEffect()</code> is true, hunting_mode is <strong>removed</strong> from Utils.d() and replaced by the <code>gameshader</code> plugin.</p>
+    <p>Whitelist from config: pubgmhd, hyxd, ko, krmobile, ig, vng.pubgmobile, pubg.newstate, rekoo.pubgm, iglite, pubg.imobile</p>
+  </div>
+</div>
+
+<!-- =========================================================
+     SECTION 4 — REGISTRY
+     ========================================================= -->
+<div class="section" id="registry">
+  <div class="section-header">
+    <span class="section-num">R</span>
+    <span class="section-title">Master Plugin Registry — Utils.d() Gates</span>
+  </div>
+
+  <p style="margin-bottom:16px">Every plugin removed from the master list by <code>Utils.d()</code>, along with its ZteFeature gate. Plugins not listed here have <strong>no feature flag gate</strong> and are always in the list (subject to PluginConfig.l() space/whitelist filtering).</p>
+
+  <div class="table-wrap">
+  <table>
+    <tr><th>Plugin Key</th><th>ZteFeature Method</th><th>Feature Flag String</th><th>Default</th><th>Removal Condition</th></tr>
+    <tr><td><code>combat_power</code></td><td><code>isSupportDataPanelInPlugin()</code></td><td><code>ZTE_FEATURE_GAMEASSIST_PLUGIN_DATA_PANEL</code></td><td>false</td><td>flag is false</td></tr>
+    <tr><td><code>redmagic_broadcast</code></td><td><code>isSupportRedmagicBroadcastInPlugin()</code></td><td><code>ZTE_FEATURE_GAMEASSIST_PLUGIN_REDMAGIC_BROADCAST</code></td><td>false</td><td>flag is false</td></tr>
+    <tr><td><code>help</code></td><td><code>isSupportRedmagicElvesaidInPlugin()</code></td><td><code>ZTE_FEATURE_GAMEASSIST_PLUGIN_REDMAGIC_ELVESAID</code></td><td>false</td><td>flag is false</td></tr>
+    <tr><td><code>chat_assit</code></td><td><code>isSupportChatAssistInPlugin()</code></td><td><code>ZTE_FEATURE_GAMEASSIST_PLUGIN_CHAT_ASSIST</code></td><td>false</td><td>flag is false</td></tr>
+    <tr><td><code>biablo_mode</code></td><td><code>isSupportBiabloPlugin()</code></td><td><code>ZTE_FEATURE_GAMEASSIST_PLUGIN_BIABLO</code></td><td>false</td><td>flag is false OR soc_vendor ≠ "qcom"</td></tr>
+    <tr><td><code>operation_devices</code></td><td><code>isSupportXGravityPlugin()</code></td><td><code>PLUGIN_OPERATION_DEVICES</code> or <code>X_GRAVITY_GAMEPAD</code></td><td>false</td><td>both flags false</td></tr>
+    <tr><td><code>screen_extraction</code></td><td><code>isSupportFixedLookPlugin()</code></td><td><code>ZTE_FEATURE_GAMEASSIST_PLUGIN_FIXEDLOOK</code></td><td>false</td><td>flag is false</td></tr>
+    <tr><td><code>vibrate</code></td><td><code>D()</code></td><td>custom check</td><td>—</td><td>D() returns true</td></tr>
+    <tr><td><code>ai_trigger</code></td><td><code>isSupportAITriggerPlugin()</code></td><td><code>ZTE_FEATURE_GAMEASSIST_PLUGIN_AI_TRIGGER</code></td><td>false</td><td>flag is false</td></tr>
+    <tr><td><code>card_assist</code></td><td><code>isSupportCardAssistPlugin()</code></td><td><code>ZTE_FEATURE_GAMEASSIST_PLUGIN_CARD_ASSIST</code></td><td>false</td><td>flag is false</td></tr>
+    <tr><td><code>hunting_mode</code></td><td><code>isSupportGameDisplayFilterEffect()</code></td><td><code>ZTE_FEATURE_GAME_DISPLAY_FILTER_EFFECT</code></td><td>false</td><td>flag is <strong>true</strong> (replaced by gameshader)</td></tr>
+    <tr><td><code>gameshader</code></td><td><code>isSupportGameDisplayFilterEffect()</code></td><td><code>ZTE_FEATURE_GAME_DISPLAY_FILTER_EFFECT</code></td><td>false</td><td>flag is <strong>false</strong> (hunting_mode used instead)</td></tr>
+    <tr><td><code>super_resolution</code></td><td><code>isSupportSuperResolution()</code></td><td><code>ZTE_FEATURE_GFRC</code></td><td>false</td><td>flag is false</td></tr>
+    <tr><td><code>ai_detect</code></td><td><code>G()</code></td><td><code>ZTE_FEATURE_GAME_SOUND_PROBE</code></td><td>false</td><td>!isSupportSoundProbe() OR game ≠ pubgmhd</td></tr>
+    <tr><td><code>sound_effect</code></td><td><code>F()</code></td><td><code>ZTE_FEATURE_GAMEASSIST_AUDIO_EQUALIZER</code></td><td><strong>true</strong></td><td>flag false OR DTS hardware not detected</td></tr>
+    <tr><td><code>mora_ai_speaker</code></td><td><code>isSupportAISpeaker()</code></td><td><code>ZTE_FEATURE_AI_SPEAKER</code></td><td>false</td><td>flag is false</td></tr>
+    <tr><td><code>counter</code></td><td><code>isSupportCounter()</code></td><td><code>ZTE_FEATURE_GAME_PLUGIN_COUNTER</code></td><td>false</td><td>flag is false</td></tr>
+    <tr><td><code>game_prediction</code></td><td><code>isSupportGamePrediction()</code></td><td><code>ZTE_FEATURE_AI_GAME_PREDICTION</code></td><td>false</td><td>flag is false</td></tr>
+    <tr><td><code>voice_controller</code></td><td><code>isSupportVoiceController()</code></td><td><code>ZTE_FEATURE_GAMEASSIST_VOICE_CONTROLLER</code></td><td>false</td><td>flag is false</td></tr>
+    <tr><td><code>ai_tip</code></td><td><code>isSupportAITip()</code></td><td><code>ZTE_FEATURE_GAME_AI_TIPS</code></td><td>false</td><td>flag is false</td></tr>
+  </table>
+  </div>
+</div>
+
+<!-- =========================================================
+     SECTION 5 — FULL SOURCE
+     ========================================================= -->
+<div class="section" id="source">
+  <div class="section-header">
+    <span class="section-num">S</span>
+    <span class="section-title">Full Decompiled Source</span>
+  </div>
+
+  <details>
+    <summary>SoundEffectTile.java <span class="filepath">plugin/tiles/SoundEffectTile.java</span></summary>
+    <pre>package cn.nubia.gameassist.plugin.tiles;
+
+import android.content.Intent;
+import android.net.Uri;
+import android.provider.Settings;
+import cn.nubia.gameassist.R;
+import cn.nubia.gameassist.common.QSTile;
+import cn.nubia.gameassist.utils.ToastUtil;
+import cn.nubia.gameassist.utils.Utils;
+import com.zte.gameassist.aiagent.GameAgentUtil;
+import com.zte.gameassist.aiagent.IGameAssistClientCallback;
+import com.zte.gameassist.aiagent.bean.InMsg;
+import com.zte.gameassist.common.ObserverManager;
+import com.zte.gameassist.config.ZteFeature;
+import com.zte.gameassist.utils.GaLog;
+import com.zte.gameassist.utils.NubiaTrackManager;
+
+public class SoundEffectTile extends QSTile implements ObserverManager.SettingCallback {
+    private boolean v;
+    private int w;   // reason: 0 = open settings panel
+    private int x;   // reason: 6 = turn on
+    private int y;   // reason: 7 = turn off
+
+    public SoundEffectTile(QSTile.Host host) {
+        super(host);
+        this.w = 0;
+        this.x = 6;
+        this.y = 7;
+    }
+
+    private void A0(int i2) {
+        B0(i2, false);
+    }
+
+    private void B0(int i2, boolean z) {
+        GaLog.e("SoundEffectTile", "startService  " + i2);
+        Intent intent = new Intent();
+        if (ZteFeature.isDtsEqFloat()) {
+            intent.setAction("cn.zte.intent.action.EQUALIZERSERVICE");
+            intent.setPackage("cn.zte.gamefloat");
+        } else {
+            intent.setAction("cn.nubia.intent.action.EQUALIZERSERVICE");
+            intent.setPackage("com.dts.dtsxultra");
+        }
+        intent.putExtra("packagename", this.f6163s);
+        intent.putExtra("reason", i2);
+        intent.putExtra("close_window", z);
+        this.f6153i.startService(intent);
+    }
+
+    @Override
+    protected boolean S() {
+        super.S();
+        GaLog.e("SoundEffectTile", "handleClick() : mCurPackage :  "
+            + this.f6163s + " " + this.f6162r);
+        if (this.f6162r) {
+            this.u = true;
+            if (this.t) {
+                A0(this.y);   // turn off
+            } else {
+                this.f6152h.b();
+                A0(this.x);   // turn on
+            }
+        } else {
+            ToastUtil.a(this.f6153i.getString(R.string.toast_unsupport_app));
+        }
+        NubiaTrackManager.p().u();
+        return true;
+    }
+
+    @Override
+    protected boolean a0() {
+        super.a0();
+        if (!this.f6162r) {
+            ToastUtil.a(this.f6153i.getString(R.string.toast_unsupport_app));
+            return false;
+        }
+        if (Utils.P(this.f6153i)) {
+            ToastUtil.a(this.f6153i.getString(R.string.game_close_pip));
+            return true;
+        }
+        if (!this.t) {
+            ToastUtil.a(this.f6153i.getString(R.string.ic_qs_function_enable));
+            return false;
+        }
+        this.f6152h.b();
+        A0(this.w);   // open settings
+        return false;
+    }
+
+    @Override
+    public void c(boolean z) {
+        if (this.v == z) return;
+        this.v = z;
+        if (z) {
+            ObserverManager.c().b(this.f6153i,
+                Settings.Global.getUriFor("game_equalizer_enable"), this);
+        } else {
+            ObserverManager.c().d(this.f6153i,
+                Settings.Global.getUriFor("game_equalizer_enable"), this);
+        }
+    }
+
+    @Override
+    protected void c0(QSTile.State state, Object obj) {
+        super.c0(state, obj);
+        state.f6168b = QSTile.ResourceIcon.b(
+            (this.t &amp;&amp; this.f6162r)
+                ? R.drawable.plugin_sound_on
+                : R.drawable.plugin_sound_off);
+        state.f6169c = this.f6153i.getString(z0());
+        state.f6170d = this.f6153i.getString(R.string.plugin_sound_introduction);
+        state.f6171e = QSTile.ResourceIcon.b(
+            (this.t &amp;&amp; this.f6162r)
+                ? R.drawable.plugin_settings_on
+                : R.drawable.plugin_settings_off);
+    }
+
+    @Override
+    public boolean f0() {
+        return Settings.Global.getInt(
+            this.f6153i.getContentResolver(), "game_equalizer_enable", 0) == 1;
+    }
+
+    @Override
+    protected void k0(String str, String str2,
+            IGameAssistClientCallback cb, InMsg inMsg) {
+        super.k0(str, str2, cb, inMsg);
+        if ("game_turn_on_custom_music_volume".equals(str)
+                &amp;&amp; i0(cb, inMsg)) {
+            if (!this.t) A0(this.x);
+            GameAgentUtil.e(this.f6153i, cb, inMsg, z0());
+        } else if ("game_turn_off_custom_music_volume".equals(str)
+                &amp;&amp; i0(cb, inMsg)) {
+            B0(this.y, true);
+            GameAgentUtil.d(this.f6153i, cb, inMsg, z0());
+        }
+    }
+
+    @Override
+    public void w(boolean z, Uri uri) { o0(); }
+
+    protected int z0() { return R.string.plugin_icon_sound; }
+}</pre>
+  </details>
+
+  <details>
+    <summary>AiDetectTile.java <span class="filepath">plugin/tiles/AiDetectTile.java</span></summary>
+    <pre>package cn.nubia.gameassist.plugin.tiles;
+
+import android.net.Uri;
+import android.provider.Settings;
+import cn.nubia.gameassist.R;
+import cn.nubia.gameassist.common.QSTile;
+import cn.nubia.gameassist.common.TileHost;
+import cn.nubia.gameassist.utils.ToastUtil;
+import cn.nubia.gameassist.utils.Utils;
+import com.zte.gameassist.aiagent.GameAgentUtil;
+import com.zte.gameassist.aiagent.IGameAssistClientCallback;
+import com.zte.gameassist.aiagent.bean.InMsg;
+import com.zte.gameassist.common.GameMonitor;
+import com.zte.gameassist.common.ObserverManager;
+import com.zte.gameassist.common.SystemMgr;
+import com.zte.gameassist.utils.GaLog;
+import com.zte.gameassist.utils.NubiaTrackManager;
+
+public class AiDetectTile extends QSTile
+        implements ObserverManager.SettingCallback, GameMonitor.Callback {
+    private boolean v;
+
+    public AiDetectTile(QSTile.Host host) { super(host); }
+
+    public void A0() {
+        GaLog.e("AiDetectTile", "startAiDetect: ");
+        Settings.Global.putInt(this.f6153i.getContentResolver(),
+            "game_foot_ai_detect", 1);
+    }
+
+    public void B0() {
+        GaLog.e("AiDetectTile", "stopAiDetect: ");
+        Settings.Global.putInt(this.f6153i.getContentResolver(),
+            "game_foot_ai_detect", 0);
+    }
+
+    @Override
+    protected boolean S() {
+        super.S();
+        if (!this.f6162r) {
+            ToastUtil.a(this.f6153i.getString(R.string.toast_unsupport_app));
+        } else {
+            if (Utils.P(this.f6153i)) {
+                ToastUtil.a(this.f6153i.getString(R.string.game_close_pip));
+                return true;
+            }
+            this.u = true;
+            if (this.t) { B0(); }
+            else { A0(); this.f6152h.b(); }
+        }
+        NubiaTrackManager.p().u();
+        return false;
+    }
+
+    @Override
+    public void c(boolean z) {
+        if (this.v == z) return;
+        this.v = z;
+        if (z) {
+            ObserverManager.c().b(this.f6153i,
+                Settings.Global.getUriFor("game_foot_ai_detect"), this);
+        } else {
+            ObserverManager.c().d(this.f6153i,
+                Settings.Global.getUriFor("game_foot_ai_detect"), this);
+        }
+    }
+
+    @Override
+    protected void c0(QSTile.State state, Object obj) {
+        super.c0(state, obj);
+        state.f6168b = QSTile.ResourceIcon.b(
+            (state.f6175i &amp;&amp; this.f6162r)
+                ? R.drawable.plugin_probe_on
+                : R.drawable.plugin_probe_off);
+        state.f6169c = this.f6153i.getString(z0());
+        state.f6170d = this.f6153i.getString(R.string.ai_detect_introduction);
+    }
+
+    @Override
+    public boolean f0() {
+        return Settings.Global.getInt(this.f6153i.getContentResolver(),
+            "game_foot_ai_detect", 0) == 1;
+    }
+
+    @Override
+    protected void k0(String str, String str2,
+            IGameAssistClientCallback cb, InMsg inMsg) {
+        super.k0(str, str2, cb, inMsg);
+        if ("game_turn_on_ai_detect_plug".equals(str) &amp;&amp; i0(cb, inMsg)) {
+            if (!this.t) { A0(); this.t = true; }
+            GameAgentUtil.e(this.f6153i, cb, inMsg, z0());
+        } else if ("game_turn_off_ai_detect_plug".equals(str)
+                &amp;&amp; i0(cb, inMsg)) {
+            if (this.t) { B0(); this.t = false; }
+            GameAgentUtil.d(this.f6153i, cb, inMsg, z0());
+        }
+    }
+
+    @Override protected void l0(TileHost h) { SystemMgr.y(this.f6153i).h(this); }
+    @Override protected void n0(TileHost h) { SystemMgr.y(this.f6153i).i(this); }
+    @Override public void y() { /* onGameStart */ }
+    @Override public void z() { /* onGameStop */ }
+    @Override public void w(boolean z, Uri uri) { o0(); }
+    protected int z0() { return R.string.plugin_label_ai_detect; }
+}</pre>
+  </details>
+
+  <details>
+    <summary>AITipTile.java <span class="filepath">plugin/tiles/AITipTile.java</span></summary>
+    <pre>package cn.nubia.gameassist.plugin.tiles;
+
+import android.content.Intent;
+import android.net.Uri;
+import android.os.Build;
+import android.provider.Settings;
+import cn.nubia.gameassist.R;
+import cn.nubia.gameassist.common.QSTile;
+import cn.nubia.gameassist.utils.ToastUtil;
+import cn.nubia.gameassist.utils.Utils;
+import com.zte.gameassist.aiagent.IGameAssistClientCallback;
+import com.zte.gameassist.aiagent.bean.InMsg;
+import com.zte.gameassist.common.ObserverManager;
+import com.zte.gameassist.config.ZteFeature;
+import com.zte.gameassist.utils.GaLog;
+import com.zte.gameassist.utils.NubiaTrackManager;
+
+public class AITipTile extends QSTile implements ObserverManager.SettingCallback {
+    private boolean v;
+
+    public AITipTile(QSTile.Host host) { super(host); }
+
+    private void A0(String str) {
+        Intent intent = new Intent("cn.zte.gamefloat.ai.tip");
+        intent.putExtra("event", str);
+        intent.putExtra("packageName", this.f6163s);
+        intent.setPackage("cn.zte.gamefloat");
+        this.f6153i.startService(intent);
+    }
+
+    private void B0() { GaLog.e("AITipTile", "startAITip"); A0("open"); }
+    private void C0() { GaLog.e("AITipTile", "startEditView"); A0("set"); }
+    private void D0() { GaLog.a("AITipTile", "stopAITip"); A0("close"); }
+    private void z0() { GaLog.e("AITipTile", "requestAITip"); A0("request_tip"); }
+
+    @Override
+    protected boolean S() {
+        super.S();
+        if (this.f6162r) {
+            this.u = true;
+            if (this.t) { D0(); }
+            else { B0(); this.f6152h.b(); }
+        } else {
+            ToastUtil.a(this.f6153i.getString(R.string.touch_key_toast));
+        }
+        NubiaTrackManager.p().u();
+        return false;
+    }
+
+    @Override
+    protected boolean a0() {
+        super.a0();
+        if (!this.f6162r) return false;
+        if (Utils.P(this.f6153i)) {
+            ToastUtil.a(this.f6153i.getString(R.string.game_close_pip));
+            return true;
+        }
+        if (!this.t) {
+            ToastUtil.a(this.f6153i.getString(R.string.ic_qs_function_enable));
+            return false;
+        }
+        this.f6152h.b();
+        C0();
+        return false;
+    }
+
+    @Override
+    public void c(boolean z) {
+        if (this.v == z) return;
+        this.v = z;
+        Uri uriFor = Settings.Global.getUriFor("game_ai_tip_enable_pkgs");
+        if (z) { ObserverManager.c().b(this.f6153i, uriFor, this); }
+        else   { ObserverManager.c().d(this.f6153i, uriFor, this); }
+    }
+
+    @Override
+    protected void c0(QSTile.State state, Object obj) {
+        super.c0(state, obj);
+        if (this.f6162r &amp;&amp; this.t) {
+            state.f6168b = QSTile.ResourceIcon.b(R.drawable.plugin_ai_tip_on);
+            state.f6171e = QSTile.ResourceIcon.b(R.drawable.plugin_settings_on);
+            state.f6175i = true;
+        } else {
+            state.f6168b = QSTile.ResourceIcon.b(R.drawable.plugin_ai_tip_off);
+            state.f6171e = QSTile.ResourceIcon.b(R.drawable.plugin_settings_off);
+            state.f6175i = false;
+        }
+        // Dynamic label: SDK &gt;= 36 → "tactical coach"
+        if (Build.VERSION.SDK_INT &lt; 36) {
+            state.f6169c = this.f6153i.getString(R.string.plugin_ai_tip);
+        } else if (ZteFeature.isNeoProduct()) {
+            state.f6169c = this.f6153i.getString(R.string.plugin_neo_ai_tip_coach);
+        } else {
+            state.f6169c = this.f6153i.getString(R.string.plugin_ai_tip_coach);
+        }
+        state.f6170d = this.f6153i.getString(R.string.plugin_ai_tip_introduction);
+    }
+
+    @Override
+    public boolean f0() {
+        return Utils.x(Settings.Global.getString(
+            this.f6153i.getContentResolver(), "game_ai_tip_enable_pkgs"),
+            this.f6163s, ",");
+    }
+
+    @Override
+    protected void k0(String str, String str2,
+            IGameAssistClientCallback cb, InMsg inMsg) {
+        super.k0(str, str2, cb, inMsg);
+        if ("game_turn_on_tactical_coach".equals(str) &amp;&amp; i0(cb, inMsg)) {
+            B0();
+        } else if ("game_turn_on_tactical_advice".equals(str)) {
+            z0();
+        }
+    }
+
+    @Override public void y(int i2) { super.y(i2); }
+    @Override public void w(boolean z, Uri uri) { o0(); }
+}</pre>
+  </details>
+
+  <details>
+    <summary>GamePredictionTile.java <span class="filepath">plugin/tiles/GamePredictionTile.java</span></summary>
+    <pre>package cn.nubia.gameassist.plugin.tiles;
+
+import android.content.Intent;
+import android.net.Uri;
+import android.provider.Settings;
+import cn.nubia.gameassist.R;
+import cn.nubia.gameassist.common.QSTile;
+import cn.nubia.gameassist.common.TileHost;
+import cn.nubia.gameassist.utils.ToastUtil;
+import cn.nubia.gameassist.utils.Utils;
+import com.zte.gameassist.aiagent.GameAgentUtil;
+import com.zte.gameassist.aiagent.IGameAssistClientCallback;
+import com.zte.gameassist.aiagent.bean.InMsg;
+import com.zte.gameassist.common.GameMonitor;
+import com.zte.gameassist.common.ObserverManager;
+import com.zte.gameassist.common.SystemMgr;
+import com.zte.gameassist.utils.GaLog;
+import com.zte.gameassist.utils.NubiaTrackManager;
+
+public class GamePredictionTile extends QSTile
+        implements ObserverManager.SettingCallback, GameMonitor.Callback {
+    private boolean v;
+
+    public GamePredictionTile(QSTile.Host host) { super(host); }
+
+    private void C0(boolean z) {
+        GaLog.e("GamePredictionTile",
+            z ? "startGamePrediction" : " stopGamePrediction");
+        Intent intent = new Intent();
+        intent.setClassName("cn.zte.gamefloat",
+            "cn.zte.gamefloat.wrp.WinRatePredictionService");
+        intent.putExtra("package_name", Utils.j());
+        intent.putExtra("show", z);
+        this.f6153i.startService(intent);
+    }
+
+    protected int A0() { return R.string.plugin_game_predicition; }
+
+    @Override
+    protected boolean S() {
+        super.S();
+        if (!this.f6162r || Utils.P(this.f6153i)) {
+            ToastUtil.a(this.f6153i.getString(R.string.game_close_pip));
+            return true;
+        }
+        this.u = true;
+        // toggle
+        if (this.t) { C0(false); }
+        else { C0(true); this.f6152h.b(); }
+        NubiaTrackManager.p().u();
+        return false;
+    }
+
+    @Override
+    public void c(boolean z) {
+        if (this.v == z) return;
+        this.v = z;
+        Uri uriFor = Settings.Global.getUriFor("game_prediction_enabled_pkgs");
+        if (z) { ObserverManager.c().b(this.f6153i, uriFor, this); }
+        else   { ObserverManager.c().d(this.f6153i, uriFor, this); }
+    }
+
+    @Override
+    protected void c0(QSTile.State state, Object obj) {
+        super.c0(state, obj);
+        state.f6168b = QSTile.ResourceIcon.b(
+            (state.f6175i &amp;&amp; this.f6162r)
+                ? R.drawable.plugin_game_prediction_on
+                : R.drawable.plugin_game_prediction_off);
+        state.f6169c = this.f6153i.getString(A0());
+        state.f6170d = this.f6153i.getString(
+            R.string.plugin_game_prediction_introduction);
+    }
+
+    @Override
+    public boolean f0() {
+        return Utils.x(Settings.Global.getString(
+            this.f6153i.getContentResolver(),
+            "game_prediction_enabled_pkgs"), this.f6163s, ",");
+    }
+
+    @Override
+    protected void k0(String str, String str2,
+            IGameAssistClientCallback cb, InMsg inMsg) {
+        super.k0(str, str2, cb, inMsg);
+        if ("game_turn_on_game_predicition".equals(str) &amp;&amp; i0(cb, inMsg)) {
+            if (!this.t) { C0(true); this.t = true; }
+            GameAgentUtil.e(this.f6153i, cb, inMsg, A0());
+        } else if ("game_turn_off_game_predicition".equals(str)
+                &amp;&amp; i0(cb, inMsg)) {
+            if (this.t) { C0(false); this.t = false; }
+            GameAgentUtil.d(this.f6153i, cb, inMsg, A0());
+        } else if ("game_query_game_predicition".equals(str)
+                &amp;&amp; i0(cb, inMsg)) {
+            if (!this.t) {
+                GameAgentUtil.b(this.f6153i, cb, inMsg, A0());
+            } else {
+                float f3 = Settings.Global.getFloat(
+                    this.f6153i.getContentResolver(),
+                    "game_predication_value", -1.0f);
+                if (f3 &lt; -0.001 || f3 &gt; 1.001) {
+                    GameAgentUtil.n(this.f6153i, cb, inMsg);
+                } else {
+                    GameAgentUtil.i(this.f6153i, cb, inMsg,
+                        this.f6153i.getString(
+                            R.string.aiagent_winning_rate_prediction,
+                            (int)(f3 * 100.0f)), true);
+                }
+            }
+        }
+    }
+
+    @Override protected void l0(TileHost h) { SystemMgr.y(this.f6153i).h(this); }
+    @Override protected void n0(TileHost h) { SystemMgr.y(this.f6153i).i(this); }
+
+    @Override /* onGameStart */
+    public void y() {
+        this.f6163s = SystemMgr.t();
+        this.t = f0();
+        // Auto-start after 800ms if enabled
+        this.f6155k.postDelayed(() -&gt; {
+            if (this.t) C0(true);
+        }, 800L);
+    }
+
+    @Override public void w(boolean z, Uri uri) { o0(); }
+}</pre>
+  </details>
+
+  <details>
+    <summary>LinkMicsTranslationTile.java <span class="filepath">dessert/tiles/LinkMicsTranslationTile.java</span></summary>
+    <pre>package cn.nubia.gameassist.dessert.tiles;
+
+import android.content.ContentProviderClient;
+import android.net.Uri;
+import android.os.Bundle;
+import android.provider.Settings;
+import android.text.TextUtils;
+import cn.nubia.gameassist.R;
+import cn.nubia.gameassist.common.QSTile;
+import com.zte.gameassist.aiagent.GameAgentUtil;
+import com.zte.gameassist.aiagent.IGameAssistClientCallback;
+import com.zte.gameassist.aiagent.bean.InMsg;
+import com.zte.gameassist.common.GameMonitor;
+import com.zte.gameassist.common.SystemMgr;
+import com.zte.gameassist.utils.GaLog;
+
+public class LinkMicsTranslationTile extends QSTile
+        implements GameMonitor.Callback {
+
+    private static final Uri w =
+        Uri.parse("content://com.zte.aitranslation.contentProvider");
+    private String v;  // current package name
+
+    public LinkMicsTranslationTile(QSTile.Host host) {
+        super(host);
+        SystemMgr.y(this.f6153i).h(this);
+    }
+
+    private boolean A0(String str) {
+        String pkgs = Settings.Global.getString(
+            this.f6153i.getContentResolver(),
+            "nubia_ai_translation_enabled_pkg");
+        if (!TextUtils.isEmpty(pkgs)) {
+            for (String pkg : pkgs.split(",")) {
+                if (pkg != null &amp;&amp; pkg.equals(str)) return true;
+            }
+        }
+        return false;
+    }
+
+    public void B0(String method, Bundle bundle) {
+        ContentProviderClient client = null;
+        try {
+            client = this.f6153i.getContentResolver()
+                .acquireUnstableContentProviderClient(w);
+            if (client != null) {
+                client.call(method, null, bundle);
+            }
+        } catch (Exception e) {
+            GaLog.c(this.f6151c, "linkTranslationProvider: e = ", e);
+        } finally {
+            if (client != null) client.close();
+        }
+    }
+
+    @Override
+    protected boolean S() {
+        Bundle bundle = new Bundle();
+        bundle.putString("packageName", this.v);
+        bundle.putInt("user_id", SystemMgr.w());
+        B0(this.f6157m.f6175i ? "switch_close" : "switch_open", bundle);
+        this.f6152h.b();
+        return false;
+    }
+
+    @Override public void c(boolean z) { if (z) o0(); }
+
+    @Override
+    protected void c0(QSTile.State state, Object obj) {
+        state.f6175i = A0(this.v);
+        state.f6169c = this.f6153i.getString(
+            R.string.ic_qs_link_mics_captions_title);
+        state.f6168b = QSTile.ResourceIcon.b(state.f6175i
+            ? R.drawable.game_ic_qs_link_mics_translation_light
+            : R.drawable.game_ic_qs_link_mics_translation_normal);
+    }
+
+    @Override
+    protected void k0(String str, String str2,
+            IGameAssistClientCallback cb, InMsg inMsg) {
+        if ("game_turn_on_game_voice_translation".equals(str)) {
+            C0(true);
+            GameAgentUtil.e(this.f6153i, cb, inMsg,
+                R.string.ic_qs_link_mics_captions_title);
+        } else if ("game_turn_off_game_voice_translation".equals(str)) {
+            C0(false);
+            GameAgentUtil.d(this.f6153i, cb, inMsg,
+                R.string.ic_qs_link_mics_captions_title);
+        }
+    }
+
+    @Override public void y() { z0(); }  // onGameStart
+    @Override public void A() { z0(); }  // onGameUpdate
+
+    public void z0() {
+        String t = SystemMgr.t();
+        this.v = t;
+        if (A0(t)) {
+            Bundle bundle = new Bundle();
+            bundle.putString("packageName", this.v);
+            bundle.putInt("user_id", SystemMgr.w());
+            B0("GameUpdate", bundle);
+        }
+    }
+}</pre>
+  </details>
+
+  <details>
+    <summary>BarrageMessageTiles.java <span class="filepath">dessert/tiles/BarrageMessageTiles.java</span></summary>
+    <pre>package cn.nubia.gameassist.dessert.tiles;
+
+import android.net.Uri;
+import android.provider.Settings;
+import cn.nubia.gameassist.R;
+import cn.nubia.gameassist.common.QSTile;
+import com.zte.gameassist.common.ObserverManager;
+import com.zte.gameassist.utils.GaLog;
+
+public class BarrageMessageTiles extends QSTile
+        implements ObserverManager.SettingCallback {
+    private boolean v;
+
+    public BarrageMessageTiles(QSTile.Host host) { super(host); }
+
+    @Override
+    protected boolean S() {
+        int val = Settings.Global.getInt(
+            this.f6153i.getContentResolver(), "gsc_barrage_message", 0);
+        GaLog.a("BarrageMessageTiles", "handleClick, value:" + val);
+        Settings.Global.putInt(this.f6153i.getContentResolver(),
+            "gsc_barrage_message", val == 1 ? 0 : 1);
+        return super.S();
+    }
+
+    @Override
+    public void c(boolean z) {
+        if (this.v == z) return;
+        this.v = z;
+        if (z) {
+            ObserverManager.c().b(this.f6153i,
+                Settings.Global.getUriFor("gsc_barrage_message"), this);
+        } else {
+            ObserverManager.c().d(this.f6153i,
+                Settings.Global.getUriFor("gsc_barrage_message"), this);
+        }
+    }
+
+    @Override
+    protected void c0(QSTile.State state, Object obj) {
+        int val = Settings.Global.getInt(
+            this.f6153i.getContentResolver(), "gsc_barrage_message", 0);
+        if (val == 1) {
+            state.f6168b = QSTile.ResourceIcon.b(
+                R.drawable.game_ic_qs_barrage_light);
+            state.f6175i = true;
+        } else {
+            state.f6168b = QSTile.ResourceIcon.b(
+                R.drawable.game_ic_qs_barrage_normal);
+            state.f6175i = false;
+        }
+        state.f6169c = this.f6153i.getString(R.string.ic_qs_game_barrage);
+    }
+
+    @Override public void w(boolean z, Uri uri) { o0(); }
+}</pre>
+  </details>
+
+  <details>
+    <summary>VoiceControllerTile.java <span class="filepath">plugin/tiles/VoiceControllerTile.java</span></summary>
+    <pre>package cn.nubia.gameassist.plugin.tiles;
+
+import android.content.Intent;
+import android.net.Uri;
+import android.provider.Settings;
+import cn.nubia.gameassist.R;
+import cn.nubia.gameassist.common.QSTile;
+import cn.nubia.gameassist.plugin.policy.GameVoiceController;
+import cn.nubia.gameassist.utils.ToastUtil;
+import cn.nubia.gameassist.utils.Utils;
+import com.zte.gameassist.aiagent.GameAgentUtil;
+import com.zte.gameassist.aiagent.IGameAssistClientCallback;
+import com.zte.gameassist.aiagent.bean.InMsg;
+import com.zte.gameassist.common.ObserverManager;
+import com.zte.gameassist.utils.GaLog;
+import com.zte.gameassist.utils.NubiaTrackManager;
+
+public class VoiceControllerTile extends QSTile
+        implements ObserverManager.SettingCallback {
+    private boolean v;
+
+    public VoiceControllerTile(QSTile.Host host) { super(host); }
+
+    private void A0(String str) { B0(str, false); }
+
+    private void B0(String str, boolean z) {
+        Intent intent = new Intent(str);
+        intent.setClassName("com.zte.onemorething",
+            "com.zte.aispeaker.aigc.AudioRecordService");
+        intent.putExtra("name", "voice_controller");
+        intent.putExtra("package", this.f6163s);
+        intent.putExtra("close_window", z);
+        this.f6153i.startService(intent);
+    }
+
+    private void C0() {
+        GaLog.e("VoiceControllerTile", "startEditView");
+        A0("com.zte.onemorething.action.EDIT_VOICE_CONTROLLER");
+    }
+
+    private void D0() {
+        GaLog.e("VoiceControllerTile", "startASR");
+        A0("com.zte.onemorething.action.START_ASR");
+        GameVoiceController.f().o(true);
+    }
+
+    private void E0() {
+        GaLog.a("VoiceControllerTile", "stopASR");
+        A0("com.zte.onemorething.action.STOP_ASR");
+        GameVoiceController.f().o(false);
+    }
+
+    @Override
+    protected boolean S() {
+        super.S();
+        if (!this.f6162r) {
+            ToastUtil.a(this.f6153i.getString(R.string.touch_key_toast));
+        } else {
+            if (Utils.P(this.f6153i)) {
+                ToastUtil.a(this.f6153i.getString(R.string.game_close_pip));
+                return true;
+            }
+            this.u = true;
+            if (this.t) {
+                E0();
+                Utils.U(this.f6153i, this.f6163s,
+                    "voice_controller_enabled_pkg", false);
+            } else {
+                D0();
+                this.f6152h.b();
+            }
+        }
+        NubiaTrackManager.p().u();
+        return false;
+    }
+
+    @Override
+    protected boolean a0() {
+        super.a0();
+        if (!this.f6162r) return false;
+        if (Utils.P(this.f6153i)) {
+            ToastUtil.a(this.f6153i.getString(R.string.game_close_pip));
+            return true;
+        }
+        if (!this.t) {
+            ToastUtil.a(this.f6153i.getString(R.string.ic_qs_function_enable));
+            return false;
+        }
+        this.f6152h.b();
+        C0();
+        return false;
+    }
+
+    @Override
+    public void c(boolean z) {
+        if (this.v == z) return;
+        this.v = z;
+        Uri u = Settings.Global.getUriFor("voice_controller_enabled_pkg");
+        if (z) { ObserverManager.c().b(this.f6153i, u, this); }
+        else   { ObserverManager.c().d(this.f6153i, u, this); }
+    }
+
+    @Override
+    protected void c0(QSTile.State state, Object obj) {
+        super.c0(state, obj);
+        if (this.f6162r &amp;&amp; this.t) {
+            state.f6168b = QSTile.ResourceIcon.b(
+                R.drawable.plugin_voice_controller_on);
+            state.f6171e = QSTile.ResourceIcon.b(R.drawable.plugin_settings_on);
+            state.f6175i = true;
+        } else {
+            state.f6168b = QSTile.ResourceIcon.b(
+                R.drawable.plugin_voice_controller_off);
+            state.f6171e = QSTile.ResourceIcon.b(R.drawable.plugin_settings_off);
+            state.f6175i = false;
+        }
+        state.f6169c = this.f6153i.getString(z0());
+        state.f6170d = this.f6153i.getString(
+            R.string.voice_controller_introduction);
+    }
+
+    @Override
+    public boolean f0() {
+        return Utils.x(Settings.Global.getString(
+            this.f6153i.getContentResolver(),
+            "voice_controller_enabled_pkg"), this.f6163s, ",");
+    }
+
+    @Override
+    protected void k0(String str, String str2,
+            IGameAssistClientCallback cb, InMsg inMsg) {
+        super.k0(str, str2, cb, inMsg);
+        if ("game_turn_on_voice_map_touch".equals(str) &amp;&amp; i0(cb, inMsg)) {
+            if (!this.t) D0();
+            GameAgentUtil.e(this.f6153i, cb, inMsg, z0());
+        } else if ("game_turn_off_voice_map_touch".equals(str)
+                &amp;&amp; i0(cb, inMsg)) {
+            if (this.t) {
+                Utils.U(this.f6153i, this.f6163s,
+                    "voice_controller_enabled_pkg", false);
+                this.t = false;
+            }
+            B0("com.zte.onemorething.action.STOP_ASR", true);
+            GameAgentUtil.d(this.f6153i, cb, inMsg, z0());
+        }
+    }
+
+    @Override public void y(int i2) { super.y(i2); }
+    @Override public void w(boolean z, Uri uri) { o0(); }
+    protected int z0() { return R.string.plugin_label_voice_controller; }
+}</pre>
+  </details>
+
+  <details>
+    <summary>LowSugarGameplayTile.java <span class="filepath">dessert/tiles/LowSugarGameplayTile.java</span></summary>
+    <pre>package cn.nubia.gameassist.dessert.tiles;
+
+import android.content.Context;
+import android.database.ContentObserver;
+import android.net.Uri;
+import android.provider.Settings;
+import android.text.TextUtils;
+import cn.nubia.componentcenter.router.Router;
+import cn.nubia.componentcenter.service.LowSugarComService;
+import cn.nubia.gameassist.common.QSTile;
+import com.zte.gameassist.aiagent.GameAgentUtil;
+import com.zte.gameassist.aiagent.IGameAssistClientCallback;
+import com.zte.gameassist.aiagent.R;
+import com.zte.gameassist.aiagent.bean.InMsg;
+import com.zte.gameassist.common.SystemMgr;
+import com.zte.gameassist.config.ZteFeature;
+import com.zte.gameassist.utils.GaLog;
+
+public class LowSugarGameplayTile extends QSTile
+        implements LowSugarComService.ICallback {
+
+    private LowSugarComService v;
+    private ContentObserver w;  // watches AIGC user login state
+
+    public LowSugarGameplayTile(QSTile.Host host) {
+        super(host);
+        this.w = new ContentObserver(null) {
+            @Override
+            public void onChange(boolean z, Uri uri) {
+                if ("com.zte.aispeaker.contentProvider"
+                        .equals(uri.getAuthority())) {
+                    String logged = uri.getQueryParameter("aigcUserLogged");
+                    f6153i.getContentResolver()
+                        .unregisterContentObserver(w);
+                    if ("true".equals(logged)) {
+                        Settings.Global.putInt(f6153i.getContentResolver(),
+                            "nubia_low_sugar_gameplay_pkg_open", 1);
+                        v.g(f6153i.getString(
+                            R.string.aiagent_turn_on_function,
+                            f6153i.getString(K0())), f6153i);
+                    } else if ("false".equals(logged)) {
+                        Settings.Global.putInt(f6153i.getContentResolver(),
+                            "nubia_account_login_status", -1);
+                        v.e(2);
+                    }
+                }
+            }
+        };
+        this.v = (LowSugarComService) Router.getInstance()
+            .getService(LowSugarComService.class.getSimpleName());
+    }
+
+    protected int K0() { return cn.nubia.gameassist.R.string.ic_qs_low_sugar; }
+
+    @Override
+    protected boolean S() {
+        String t = SystemMgr.t();
+        this.f6163s = t;
+        if (!this.v.f(t)) return true;
+        this.f6152h.b();
+        this.v.d();
+        return true;
+    }
+
+    @Override public void c(boolean z) { this.v.i(z, this); }
+
+    @Override
+    protected void c0(QSTile.State state, Object obj) {
+        this.f6163s = SystemMgr.t();
+        state.f6169c = this.f6153i.getString(K0());
+        if (!this.v.f(this.f6163s)) {
+            state.f6175i = false;
+            state.f6168b = QSTile.ResourceIcon.b(
+                cn.nubia.gameassist.R.drawable
+                    .game_ic_qs_low_sugar_gameplay_unpress);
+        } else {
+            boolean c2 = this.v.c();
+            state.f6175i = c2;
+            state.f6168b = QSTile.ResourceIcon.b(c2
+                ? cn.nubia.gameassist.R.drawable
+                    .game_ic_qs_low_sugar_gameplay_light
+                : cn.nubia.gameassist.R.drawable
+                    .game_ic_qs_low_sugar_gameplay_normal);
+        }
+    }
+
+    @Override
+    protected void k0(String str, String str2,
+            IGameAssistClientCallback cb, InMsg inMsg) {
+        if (!ZteFeature.isSupportLowSugar()) return;
+
+        if ("game_start_recognition_game_task".equals(str)) {
+            if (inMsg.j() == 1) {
+                // Launch game from AI command
+                String pkg = inMsg.a();
+                if (!TextUtils.isEmpty(pkg)) {
+                    f6153i.startActivity(
+                        f6153i.getPackageManager()
+                            .getLaunchIntentForPackage(pkg));
+                }
+            } else {
+                int open = Settings.Global.getInt(
+                    f6153i.getContentResolver(),
+                    "nubia_low_sugar_gameplay_pkg_open", 0);
+                if (open != 1) {
+                    GameAgentUtil.b(f6153i, cb, inMsg, K0());
+                } else {
+                    GameAgentUtil.i(f6153i, cb, inMsg,
+                        f6153i.getString(cn.nubia.gameassist.R.string
+                            .ic_qs_low_sugar_manual_start_processing),
+                        true);
+                    this.v.b();
+                }
+            }
+        } else if ("positive".equals(str)) {
+            InMsg parent = inMsg.f();
+            if (parent != null &amp;&amp;
+                    "game_start_recognition_game_task".equals(parent.e())) {
+                if (!this.v.j(f6153i)) {
+                    f6153i.getContentResolver()
+                        .registerContentObserver(
+                            LowSugarComService.a, true, this.w);
+                    this.v.h(f6153i);
+                } else {
+                    f6153i.getContentResolver()
+                        .unregisterContentObserver(this.w);
+                    Settings.Global.putInt(f6153i.getContentResolver(),
+                        "nubia_low_sugar_gameplay_pkg_open", 1);
+                    GameAgentUtil.e(f6153i, cb, inMsg, K0());
+                }
+            }
+        }
+    }
+
+    @Override public void u() { o0(); }
+}</pre>
+  </details>
+
+  <details>
+    <summary>HuntingModeTile.java <span class="filepath">plugin/tiles/HuntingModeTile.java</span></summary>
+    <pre>package cn.nubia.gameassist.plugin.tiles;
+
+import android.content.Intent;
+import android.net.Uri;
+import android.provider.Settings;
+import android.view.View;
+import android.view.WindowManager;
+import cn.nubia.gameassist.R;
+import cn.nubia.gameassist.common.QSTile;
+import cn.nubia.gameassist.common.TileHost;
+import cn.nubia.gameassist.provider.FunctionCallController;
+import cn.nubia.gameassist.utils.ToastUtil;
+import cn.nubia.gameassist.utils.Utils;
+import com.zte.gameassist.common.InflaterHelper;
+import com.zte.gameassist.common.ObserverManager;
+import com.zte.gameassist.common.SystemMgr;
+import com.zte.gameassist.utils.GaLog;
+import com.zte.gameassist.utils.NubiaTrackManager;
+
+public class HuntingModeTile extends FloatButtonQSTile
+        implements ObserverManager.SettingCallback,
+                   FunctionCallController.Callback {
+    private boolean q0;
+    private String r0;   // current package
+    private int s0;      // game_strengthen_mode_value
+
+    public HuntingModeTile(QSTile.Host host) { super(host); }
+
+    boolean S1() { return this.s0 == 5; }  // hunting = mode 5
+
+    @Override
+    protected boolean S() {
+        super.S();
+        if (this.f6162r) {
+            this.u = true;
+            return false;
+        }
+        ToastUtil.a(this.v.getString(R.string.toast_unsupport_app));
+        return false;
+    }
+
+    @Override
+    protected void c0(QSTile.State state, Object obj) {
+        super.c0(state, obj);
+        state.f6168b = QSTile.ResourceIcon.b(state.f6175i
+            ? R.drawable.plugin_hunt_on : R.drawable.plugin_hunt_off);
+        state.f6169c = this.v.getString(R.string.plugin_icon_hunt);
+        state.f6170d = this.v.getString(R.string.plugin_hunt_introduction);
+    }
+
+    @Override
+    public void I1(boolean z) {
+        if (this.q0 == z) return;
+        this.q0 = z;
+        if (!z) {
+            ObserverManager.c().d(this.v,
+                Settings.Global.getUriFor("db_game_color_invert"), this);
+            ObserverManager.c().d(this.v,
+                Settings.Global.getUriFor("game_strengthen_mode_value"), this);
+        } else {
+            this.r0 = Utils.j();
+            ObserverManager.c().b(this.v,
+                Settings.Global.getUriFor("db_game_color_invert"), this);
+            ObserverManager.c().b(this.v,
+                Settings.Global.getUriFor("game_strengthen_mode_value"), this);
+        }
+    }
+
+    @Override
+    public void j(String... strArr) {
+        // FunctionCallController callback
+        if (!"1".equals(strArr[0])) {
+            g1();  // reset
+        } else if (K1()) {
+            Settings.Global.putInt(this.v.getContentResolver(),
+                "game_strengthen_mode_value", 5);
+            this.v.sendBroadcast(
+                new Intent("cn.nubia.intent.action.game_color_invert"));
+        }
+    }
+
+    @Override
+    void z1() {
+        // Float button click handler
+        if (this.f6162r) {
+            if (S1()) {
+                // Turn off: restore previous mode
+                int m2 = Utils.m(this.v, this.r0, false);
+                Settings.Global.putInt(this.v.getContentResolver(),
+                    "game_strengthen_mode_value", m2);
+                Utils.X(this.v, this.r0, m2);
+            } else {
+                // Turn on: set hunting mode (5)
+                Settings.Global.putInt(this.v.getContentResolver(),
+                    "game_strengthen_mode_value", 5);
+                Utils.X(this.v, this.r0, 5);
+            }
+            this.v.sendBroadcast(
+                new Intent("cn.nubia.intent.action.game_color_invert"));
+        } else {
+            ToastUtil.a(this.v.getString(R.string.toast_unsupport_app));
+        }
+        NubiaTrackManager.p().u();
+    }
+
+    @Override
+    public void w(boolean z, Uri uri) {
+        if (Settings.Global.getUriFor("game_strengthen_mode_value")
+                .equals(uri)) {
+            this.s0 = Settings.Global.getInt(
+                this.v.getContentResolver(),
+                "game_strengthen_mode_value", 0);
+        }
+        o0();
+        R1();
+    }
+
+    @Override String n1() { return "hunting_mode"; }
+    @Override int j1() { return 84; }
+    @Override int l1() { return 114; }
+    @Override String k1() {
+        return this.v.getString(R.string.plugin_float_button_hunt);
+    }
+    @Override public boolean f0() { return this.f6157m.f6175i; }
+    @Override public void c(boolean z) { }
+    @Override View r1() {
+        return InflaterHelper.f(R.layout.plugin_button_root, null);
+    }
+
+    @Override protected void c1() {
+        if (!S1() || SystemMgr.I()) return;
+        this.v.sendBroadcast(
+            new Intent("cn.nubia.intent.action.game_color_invert"));
+    }
+
+    @Override protected void G1() {
+        int m2 = Utils.m(this.v, this.r0, false);
+        Utils.X(this.v, this.r0, m2);
+    }
+
+    @Override void q1() {
+        this.f6157m.f6175i = false;
+        if (this.D != null) { this.D.x = 266; this.D.y = 222; }
+    }
+
+    @Override public void l0(TileHost h) {
+        super.l0(h);
+        FunctionCallController.c(this.v).b(O(), this);
+    }
+    @Override public void n0(TileHost h) {
+        super.n0(h);
+        FunctionCallController.c(this.v).f(O());
+    }
+}</pre>
+  </details>
+
+  <details>
+    <summary>YOLOXncnn.java <span class="filepath">cn/nubia/yolox/YOLOXncnn.java</span></summary>
+    <pre>package cn.nubia.yolox;
+
+import android.content.res.AssetManager;
+import android.graphics.Bitmap;
+import android.graphics.RectF;
+import android.util.Log;
+import androidx.annotation.NonNull;
+import java.util.Arrays;
+
+public class YOLOXncnn {
+
+    private final String f9229a;  // param file path
+    private final String f9230b;  // bin file path
+    private final String[] f9231c;  // class names
+    private long mNativePtr;
+
+    public class Obj {
+        public float f9233h;  // height
+        public String label;
+        public float prob;
+        public float w;  // width
+        public float x;
+        public float y;
+
+        public Obj() { }
+
+        public RectF a() {
+            return new RectF(x, y, w + x, f9233h + y);
+        }
+
+        public String toString() {
+            return "Obj{x=" + x + ", y=" + y + ", w=" + w
+                + ", h=" + f9233h + ", label='" + label
+                + "', prob=" + prob + '}';
+        }
+    }
+
+    static {
+        if (!Boolean.getBoolean("isUnitTest")) {
+            System.loadLibrary("yoloXncnn");
+        }
+    }
+
+    public YOLOXncnn(@NonNull String paramFile,
+            @NonNull String binFile, @NonNull String[] classNames) {
+        this.f9229a = paramFile;
+        this.f9230b = binFile;
+        this.f9231c = classNames;
+    }
+
+    private native Obj[] detect(Bitmap bitmap,
+        boolean flip, String[] classNames);
+    private native boolean init(AssetManager mgr,
+        String paramFile, String binFile);
+    private native void releaseXncnn();
+
+    public Obj[] a(Bitmap bitmap, boolean flip) {
+        synchronized (this) {
+            if (this.mNativePtr == 0) return new Obj[0];
+            try {
+                return detect(bitmap, flip, this.f9231c);
+            } finally {
+                Log.v("YOLOXncnn", "detect " + hashCode());
+            }
+        }
+    }
+
+    public boolean b(AssetManager assetManager) {
+        synchronized (this) {
+            if (this.mNativePtr != 0) return false;
+            try {
+                return init(assetManager, this.f9229a, this.f9230b);
+            } finally {
+                Log.v("YOLOXncnn", "init " + this);
+            }
+        }
+    }
+
+    public boolean c() { return this.mNativePtr != 0; }
+
+    public void d() {
+        synchronized (this) {
+            if (this.mNativePtr != 0) {
+                releaseXncnn();
+            }
+        }
+    }
+
+    protected void finalize() {
+        super.finalize();
+        d();
+    }
+
+    public String toString() {
+        return "YOLOXncnn{mParamFile='" + f9229a
+            + "', mBinFile='" + f9230b
+            + "', mNativePtr=" + mNativePtr
+            + ", mClassNames=" + Arrays.toString(f9231c)
+            + "}  " + hashCode();
+    }
+}</pre>
+  </details>
+
+  <details>
+    <summary>SkillReleaseModel.java <span class="filepath">cn/nubia/yolox/SkillReleaseModel.java</span></summary>
+    <pre>package cn.nubia.yolox;
+
+import android.content.res.AssetManager;
+import android.graphics.Bitmap;
+
+public class SkillReleaseModel {
+
+    private volatile boolean f9226a = false;  // isReleased
+    private final Object f9227b = new Object();
+    private volatile long nativePtr;
+
+    static {
+        if (!Boolean.getBoolean("isUnitTest")) {
+            System.loadLibrary("yoloXncnn");
+        }
+    }
+
+    private native boolean CanRelease(Bitmap bitmap);
+    private native boolean Init(AssetManager assetManager);
+    private native void Release();
+
+    public boolean a(AssetManager mgr) { return Init(mgr); }
+
+    public boolean b(Bitmap bitmap) {
+        synchronized (this.f9227b) {
+            if (!this.f9226a &amp;&amp; this.nativePtr != 0) {
+                return CanRelease(bitmap);
+            }
+            return false;
+        }
+    }
+
+    public void c() {
+        synchronized (this.f9227b) {
+            if (!this.f9226a) {
+                Release();
+                this.nativePtr = 0L;
+                this.f9226a = true;
+            }
+        }
+    }
+
+    protected void finalize() {
+        super.finalize();
+        Release();
+    }
+}</pre>
+  </details>
+
+  <details>
+    <summary>YOLOXWindow.java <span class="filepath">cn/nubia/yolox/YOLOXWindow.java</span></summary>
+    <pre>package cn.nubia.yolox;
+
+import android.content.Context;
+import android.database.ContentObserver;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
+import android.os.Handler;
+import android.os.Looper;
+import android.provider.Settings;
+import android.view.MotionEvent;
+import android.view.View;
+import android.view.WindowManager;
+import cn.nubia.yolox.YOLOXncnn;
+
+public class YOLOXWindow extends View {
+
+    private static final String URI_YOLOX_RECT_SHOW = "yolox_rect_show";
+    final int[] colors;           // 19 distinct detection colors
+    private ContentObserver mContentObserver;
+    private boolean mIsAdd;
+    private YOLOXncnn.Obj[] mObjects;
+    private Paint mPaint;         // bounding box stroke
+    private boolean mShowRect;
+    private Paint mTextbgpaint;   // label background
+    private Paint mTextpaint;     // label text
+    private Handler mUIHandler;
+    private WindowManager mWindowManager;
+    private WindowManager.LayoutParams mWindowParams;
+
+    public YOLOXWindow(Context context) { /* ... constructors chain ... */ }
+
+    private void f() {
+        // Init paints
+        mTextpaint = new Paint();
+        mTextpaint.setColor(0xFF000000);  // black
+        mTextpaint.setTextSize(18.0f);
+        mTextpaint.setTextAlign(Paint.Align.LEFT);
+        mTextbgpaint = new Paint();
+        mTextbgpaint.setColor(0xFFFFFFFF);  // white bg
+        mTextbgpaint.setStyle(Paint.Style.FILL);
+        mPaint = new Paint();
+        mPaint.setStyle(Paint.Style.STROKE);
+        mPaint.setStrokeWidth(1.0f);
+        mUIHandler = new Handler(Looper.getMainLooper());
+        mContentObserver = new ContentObserver(mUIHandler) {
+            @Override public void onChange(boolean z) {
+                super.onChange(z);
+                m();  // refresh mShowRect from Settings
+            }
+        };
+        mWindowManager = (WindowManager)
+            getContext().getSystemService("window");
+    }
+
+    private void g() {
+        // Window params: fullscreen, click-through, system overlay
+        mWindowParams = new WindowManager.LayoutParams();
+        mWindowParams.width = -1;   // MATCH_PARENT
+        mWindowParams.height = -1;
+        mWindowParams.format = -2;  // TRANSLUCENT
+        mWindowParams.type = 2038;  // TYPE_APPLICATION_OVERLAY
+        mWindowParams.setTitle("yolox_window");
+        mWindowParams.flags |= 16777232;  // NOT_TOUCHABLE | LAYOUT_IN_SCREEN
+        mWindowParams.layoutInDisplayCutoutMode = 3;
+    }
+
+    void m() {
+        mShowRect = Settings.Global.getInt(
+            getContext().getContentResolver(),
+            URI_YOLOX_RECT_SHOW, 0) == 1;
+    }
+
+    public void e() { /* removeView on UI thread */ }
+    public void k() { /* addView on UI thread */ }
+
+    @Override
+    protected void onDraw(Canvas canvas) {
+        super.onDraw(canvas);
+        if (!mShowRect || mObjects == null || mObjects.length &lt;= 0) return;
+        d(canvas);
+    }
+
+    private void d(Canvas canvas) {
+        for (int i = 0; i &lt; mObjects.length; i++) {
+            mPaint.setColor(colors[i % 19]);
+            YOLOXncnn.Obj obj = mObjects[i];
+            canvas.drawRect(obj.x, obj.y,
+                obj.x + obj.w, obj.y + obj.f9233h, mPaint);
+            String label = obj.label + " = "
+                + String.format("%.1f", obj.prob * 100f) + "%";
+            float tw = mTextpaint.measureText(label);
+            float th = (-mTextpaint.ascent()) + mTextpaint.descent();
+            float tx = obj.x;
+            float ty = obj.y - th;
+            if (ty &lt; 0) ty = 0;
+            if (tx + tw &gt; getWidth()) tx = getWidth() - tw;
+            canvas.drawRect(tx, ty, tx + tw, ty + th, mTextbgpaint);
+            canvas.drawText(label, tx, ty - mTextpaint.ascent(), mTextpaint);
+        }
+    }
+
+    public void setData(YOLOXncnn.Obj[] objArr) {
+        mObjects = objArr;
+        postInvalidate();
+    }
+
+    @Override
+    public boolean onTouchEvent(MotionEvent e) { return false; }
+}</pre>
+  </details>
+
+  <details>
+    <summary>ZteFeature.java <span class="filepath">com/zte/gameassist/config/ZteFeature.java</span></summary>
+    <pre>package com.zte.gameassist.config;
+
+import android.os.Build;
+import android.os.SystemProperties;
+import android.text.TextUtils;
+import com.zte.shared.wrapper.ZteFeatureWrapper;
+import java.io.File;
+
+public final class ZteFeature {
+
+    // ── Region detection ──
+    public static final boolean IS_INTER_VERSION =
+        "abroad".equals(SystemProperties.get(
+            "ro.vendor.mifavor.custom", "home"));
+
+    // ── Feature flag constants ──
+    // (selected — full list has 60+ constants)
+    private static final String ZTE_FEATURE_GAMEASSIST_AUDIO_EQUALIZER =
+        "ZTE_FEATURE_GAMEASSIST_AUDIO_EQUALIZER";
+    private static final String ZTE_FEATURE_GAMEASSIST_VOICE_CONTROLLER =
+        "ZTE_FEATURE_GAMEASSIST_VOICE_CONTROLLER";
+    private static final String ZTE_FEATURE_GAME_AI_TIPS =
+        "ZTE_FEATURE_GAME_AI_TIPS";
+    public static final String ZTE_FEATURE_AI_GAME_PREDICTION =
+        "ZTE_FEATURE_AI_GAME_PREDICTION";
+    public static final String ZTE_FEATURE_GAME_DTS_EQ_FLOAT =
+        "ZTE_FEATURE_GAME_DTS_EQ_FLOAT";
+    public static final String ZTE_FEATURE_GAME_DISPLAY_FILTER_EFFECT =
+        "ZTE_FEATURE_GAME_DISPLAY_FILTER_EFFECT";
+    public static final String ZTE_FEATURE_GAME_SOUND_PROBE =
+        "ZTE_FEATURE_GAME_SOUND_PROBE";
+    private static final String ZTE_FEATURE_LOW_SUGAR =
+        "ZTE_FEATURE_LOW_SUGAR";
+    public static final String ZTE_FEATURE_MAGIC_SUPER_RESOLUTION =
+        "ZTE_FEATURE_GFRC";
+
+    // ── Micropump cooling ──
+    private static final String NODE_PATH_MICROPUMP_ENABLE =
+        "/proc/driver/micropump/enable";
+    private static final File MICROPUMP_ENABLE_FILE =
+        new File(NODE_PATH_MICROPUMP_ENABLE);
+
+    // ── Feature flag accessors ──
+    public static boolean isDtsEqFloat() {
+        return ZteFeatureWrapper.getBoolean(
+            ZTE_FEATURE_GAME_DTS_EQ_FLOAT, false);
+    }
+
+    public static boolean isSupportAudioEqualizer() {
+        return ZteFeatureWrapper.getBoolean(
+            ZTE_FEATURE_GAMEASSIST_AUDIO_EQUALIZER, true); // default TRUE
+    }
+
+    public static boolean isSupportVoiceController() {
+        return ZteFeatureWrapper.getBoolean(
+            ZTE_FEATURE_GAMEASSIST_VOICE_CONTROLLER, false);
+    }
+
+    public static boolean isSupportAITip() {
+        return ZteFeatureWrapper.getBoolean(
+            ZTE_FEATURE_GAME_AI_TIPS, false);
+    }
+
+    public static boolean isSupportGamePrediction() {
+        return ZteFeatureWrapper.getBoolean(
+            ZTE_FEATURE_AI_GAME_PREDICTION, false);
+    }
+
+    public static boolean isSupportLowSugar() {
+        return ZteFeatureWrapper.getBoolean(
+            ZTE_FEATURE_LOW_SUGAR, false);
+    }
+
+    public static boolean isSupportSoundProbe() {
+        return ZteFeatureWrapper.getBoolean(
+            ZTE_FEATURE_GAME_SOUND_PROBE, false);
+    }
+
+    public static boolean isSupportGameDisplayFilterEffect() {
+        return ZteFeatureWrapper.getBoolean(
+            ZTE_FEATURE_GAME_DISPLAY_FILTER_EFFECT, false);
+    }
+
+    public static boolean isNeoProduct() {
+        return ZteFeatureWrapper.getBoolean(
+            "ZTE_FEATURE_GAME_NEO_TRANSLATE", false);
+    }
+
+    public static boolean isRedMagicProduct() {
+        return ZteFeatureWrapper.getBoolean(
+            "ZTE_FEATURE_RED_MAGIC", false);
+    }
+
+    public static String getBrowserPackage() {
+        return isRedMagicProduct()
+            ? "cn.nubia.browser" : "com.ume.browser";
+    }
+
+    public static boolean supportLiquidCooling() {
+        return MICROPUMP_ENABLE_FILE.exists();
+    }
+
+    public static boolean supportImageSearch() {
+        return ZteFeatureWrapper.getBoolean(
+            "ZTE_FEATURE_GAME_AI_JARVIS", false);
+    }
+
+    // ... 35+ more flag accessors with same pattern ...
+}</pre>
+  </details>
+
+  <details>
+    <summary>PluginConfig.java <span class="filepath">plugin/config/PluginConfig.java</span></summary>
+    <pre>package cn.nubia.gameassist.plugin.config;
+
+import android.content.ContentResolver;
+import android.content.Context;
+import android.provider.Settings;
+import android.text.TextUtils;
+import cn.nubia.gameassist.plugin.PluginUtils;
+import cn.nubia.gameassist.utils.Utils;
+import com.zte.gameassist.common.FoldMgr;
+import com.zte.gameassist.common.SystemMgr;
+import com.zte.gameassist.config.ZteFeature;
+import com.zte.gameassist.utils.GaLog;
+
+public final class PluginConfig {
+
+    public static ArrayList f7221c;  // master plugin list
+    public static boolean f7220b = false;
+    public static String f7222d = Utils.q();
+
+    // ── space_trigger: which region sees this plugin ──
+    // Returns bitmask: 1=domestic, 2=international, 3=both
+    public static int h(Context ctx, String plugin) {
+        return Settings.Global.getInt(ctx.getContentResolver(),
+            "game_assist_trigger_space_" + plugin, 3);
+    }
+
+    // ── Whitelist ──
+    public static String[] i(Context ctx, String plugin) {
+        String s = Settings.Global.getString(ctx.getContentResolver(),
+            "game_assist_white_list_" + plugin);
+        return (s == null || s.length() == 0)
+            ? new String[0] : s.trim().split(",");
+    }
+
+    // ── Blacklist ──
+    public static String[] d(Context ctx, String plugin) {
+        String s = Settings.Global.getString(ctx.getContentResolver(),
+            "game_assist_black_list_" + plugin);
+        return (s == null || s.length() == 0)
+            ? new String[0] : s.trim().split(",");
+    }
+
+    // ── Enable check ──
+    public static boolean k(Context ctx, String plugin) {
+        return Settings.Global.getInt(ctx.getContentResolver(),
+            "game_assist_enable_plugin_" + plugin, 1) == 1;
+    }
+
+    // ── Region detection ──
+    public static boolean j() {
+        return !ZteFeature.IS_INTER_VERSION;  // true = domestic
+    }
+
+    // ── Master visibility check ──
+    public static boolean l(Context ctx, String plugin, String pkg) {
+        // 1. Check enable flag
+        if (!k(ctx, plugin)) return false;
+
+        // 2. Special case: super_resolution
+        if ("super_resolution".equals(plugin)) {
+            return PluginUtils.f(ctx).p(pkg);
+        }
+        if ("super_resolution_old".equals(plugin)) {
+            return ZteFeature.isSuperResolutionDetachEnable();
+        }
+
+        // 3. space_trigger region mask
+        if ((h(ctx, plugin) &amp; (j() ? 1 : 2)) == 0) return false;
+
+        // 4. Whitelist / blacklist logic
+        String[] whitelist = i(ctx, plugin);
+        String[] blacklist = d(ctx, plugin);
+        return a(whitelist, pkg)
+            ? !c(blacklist, pkg)    // in whitelist: check not blacklisted
+            : (whitelist == null || whitelist.length &lt;= 0)
+                &amp;&amp; !a(blacklist, pkg);  // no whitelist: check not blacklisted
+    }
+
+    // ── Partial match (whitelist) ──
+    public static boolean a(String[] arr, String str) {
+        if (arr != null &amp;&amp; arr.length &gt; 0) {
+            for (String s : arr) {
+                if (str.contains(s)) return true;
+            }
+        }
+        return false;
+    }
+
+    // ── Exact match (blacklist) ──
+    public static boolean c(String[] arr, String str) {
+        if (arr != null &amp;&amp; arr.length &gt; 0) {
+            for (String s : arr) {
+                if (str.equals(s)) return true;
+            }
+        }
+        return false;
+    }
+}</pre>
+  </details>
+
+  <details>
+    <summary>GameThirdAppTitle.java <span class="filepath">dessert/tiles/GameThirdAppTitle.java</span></summary>
+    <pre>package cn.nubia.gameassist.dessert.tiles;
+
+import android.app.Dialog;
+import android.content.ComponentName;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.graphics.drawable.Drawable;
+import android.net.Uri;
+import android.provider.Settings;
+import android.text.TextUtils;
+import android.view.View;
+import android.widget.TextView;
+import cn.nubia.gameassist.R;
+import cn.nubia.gameassist.common.QSTile;
+import cn.nubia.gameassist.utils.AppsHelper;
+import cn.nubia.gameassist.utils.TilesUtil;
+import cn.nubia.gameassist.utils.Utils;
+import cn.nubia.systemwrapper.ActivityManagerWrapper;
+import cn.nubia.systemwrapper.GameKeysWrapper;
+import com.zte.gameassist.common.ObserverManager;
+
+public class GameThirdAppTitle extends QSTile
+        implements ObserverManager.SettingCallback {
+
+    private static PackageManager y;
+    private boolean v;
+    private Dialog w;
+
+    public GameThirdAppTitle(QSTile.Host host) {
+        super(host);
+        y = this.f6153i.getPackageManager();
+    }
+
+    // Resolves package name from plugin key
+    // e.g. "game_browser" → cn.nubia.browser
+    //      "game_wechat" → com.tencent.mm
+    public String F0() { return TilesUtil.l(O()); }
+
+    // Resolves launcher activity
+    public String D0() { return Utils.i(this.f6153i, F0()); }
+
+    @Override
+    protected boolean S() {
+        if (!this.f6157m.f6176j) return false;
+        if (super.S()) return true;
+
+        // Check for dual-app (WeChat/QQ clone)
+        if (GameKeysWrapper.b().d(this.f6153i, F0(), 9999)) {
+            H0();  // show dialog: original vs clone
+        } else {
+            I0();  // direct launch
+        }
+        return false;
+    }
+
+    private void I0() {
+        Intent intent = new Intent();
+        intent.addFlags(0x10000000);
+        intent.setComponent(new ComponentName(F0(), D0()));
+        ActivityManagerWrapper.b().f(intent, this.f6153i);
+    }
+
+    private void J0() {
+        // Launch twin/clone app
+        Intent intent = new Intent();
+        intent.addFlags(0x10000000);
+        intent.setComponent(new ComponentName(F0(), D0()));
+        ActivityManagerWrapper.b().g(intent, this.f6153i,
+            ActivityManagerWrapper.b().c(this.f6153i, 9999));
+    }
+
+    @Override
+    protected void c0(QSTile.State state, Object obj) {
+        state.f6169c = AppsHelper.b(F0());  // app label
+        state.f6168b = QSTile.ResourceIcon.b(
+            TilesUtil.m(state.f6177k));  // icon from plugin key
+    }
+
+    @Override
+    public void c(boolean z) {
+        if (this.v == z) return;
+        this.v = z;
+        if (!z) {
+            ObserverManager.c().d(this.f6153i,
+                Settings.Global.getUriFor("pip_pkg"), this);
+        } else {
+            ObserverManager.c().b(this.f6153i,
+                Settings.Global.getUriFor("pip_pkg"), this);
+            o0();
+        }
+    }
+
+    @Override public void w(boolean z, Uri uri) {
+        Settings.Global.getUriFor("pip_pkg").equals(uri);
+    }
+}</pre>
+  </details>
+
+  <details>
+    <summary>Utils.d() — Master Feature Gate Filter <span class="filepath">cn/nubia/gameassist/utils/Utils.java:410-483</span></summary>
+    <pre>private static ArrayList d(ArrayList arrayList) {
+    if (!ZteFeature.isSupportDataPanelInPlugin())
+        arrayList.remove("combat_power");
+    if (!ZteFeature.isSupportRedmagicBroadcastInPlugin())
+        arrayList.remove("redmagic_broadcast");
+    if (!ZteFeature.isSupportRedmagicElvesaidInPlugin())
+        arrayList.remove("help");
+    if (!ZteFeature.isSupportChatAssistInPlugin())
+        arrayList.remove("chat_assit");
+    if (!ZteFeature.isSupportBiabloPlugin())
+        arrayList.remove("biablo_mode");
+    if (!ZteFeature.isSupportXGravityPlugin())
+        arrayList.remove("operation_devices");
+    if (!ZteFeature.isSupportFixedLookPlugin())
+        arrayList.remove("screen_extraction");
+    if (D())
+        arrayList.remove("vibrate");
+    if (!ZteFeature.isSupportAITriggerPlugin())
+        arrayList.remove("ai_trigger");
+    if (!ZteFeature.isSupportCardAssistPlugin())
+        arrayList.remove("card_assist");
+
+    // hunting_mode vs gameshader — mutually exclusive
+    if (ZteFeature.isSupportGameDisplayFilterEffect()) {
+        arrayList.remove("hunting_mode");
+    } else {
+        arrayList.remove("gameshader");
+    }
+
+    if (!ZteFeature.isSupportSuperResolution())
+        arrayList.remove("super_resolution");
+    if (!PluginUtils.f(f()).h() || ZteFeature.isSupportSuperResolution())
+        arrayList.remove("super_resolution_old");
+
+    // ai_detect: G() = !(isSupportSoundProbe &amp;&amp; game==pubgmhd)
+    if (G())
+        arrayList.remove("ai_detect");
+
+    if (E())
+        arrayList.remove("pleased_display");
+    if (!ZteFeature.isSupportHighSensitivityWheel())
+        arrayList.remove("high_sensitivity_wheel");
+
+    // sound_effect: F() = !isSupportAudioEqualizer || !DTS hardware
+    if (F())
+        arrayList.remove("sound_effect");
+
+    if (!ZteFeature.isSupportSensorOperation())
+        arrayList.remove("sensor_operation");
+    if (!ZteFeature.isSupportAISpeaker())
+        arrayList.remove("mora_ai_speaker");
+    if (!ZteFeature.isSupportCounter())
+        arrayList.remove("counter");
+    if (!ZteFeature.isSupportGamePrediction())
+        arrayList.remove("game_prediction");
+    if (!ZteFeature.isSupportVoiceController())
+        arrayList.remove("voice_controller");
+    if (!ZteFeature.isSupportAITip())
+        arrayList.remove("ai_tip");
+    return arrayList;
+}
+
+// Helper: G() — ai_detect visibility
+private static boolean G() {
+    return (ZteFeature.isSupportSoundProbe()
+        &amp;&amp; "com.tencent.tmgp.pubgmhd".equals(j()))
+        ? false : true;
+}
+
+// Helper: F() — sound_effect visibility
+private static boolean F() {
+    if (!ZteFeature.isSupportAudioEqualizer()) return true;
+    AudioManager am = (AudioManager) f().getSystemService("audio");
+    int g2 = g();
+    Boolean B = B(f(), g2);
+    if (B != null) return !B.booleanValue();
+    return !"isDtsGameEnhanceSupported=on".equals(
+        am.getParameters("isDtsGameEnhanceSupported=" + g2));
+}</pre>
+  </details>
+
+</div>
+
+</div>

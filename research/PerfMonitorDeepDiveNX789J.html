@@ -1,0 +1,2723 @@
+<title>Performance Monitor Deep Dive</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap">
+<style>
+:root {
+  --bg-deep: #0c0e1a;
+  --bg-card: #151829;
+  --bg-card-alt: #1a1d2e;
+  --bg-pill: #222635;
+  --border: #2a2e42;
+  --border-pill: #545353;
+  --text-primary: #e0e4ec;
+  --text-secondary: #8b90a5;
+  --text-dim: #5c6178;
+  --accent: #00d4ff;
+  --accent-dim: rgba(0,212,255,0.12);
+  --accent2: #ffb347;
+  --accent2-dim: rgba(255,179,71,0.10);
+  --green: #00e88a;
+  --green-dim: rgba(0,232,138,0.10);
+  --red: #ff5c5c;
+  --red-dim: rgba(255,92,92,0.10);
+  --purple: #a78bfa;
+  --purple-dim: rgba(167,139,250,0.10);
+  --code-bg: #0a0c16;
+  --code-border: #1e2236;
+  --font-body: 'DM Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Space Mono', 'Consolas', 'Monaco', monospace;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg-deep: #f4f5f9;
+    --bg-card: #ffffff;
+    --bg-card-alt: #f0f1f6;
+    --bg-pill: #e8e9f0;
+    --border: #d4d6e0;
+    --border-pill: #b0b3c0;
+    --text-primary: #1a1d2e;
+    --text-secondary: #5c6178;
+    --text-dim: #8b90a5;
+    --accent: #0095b3;
+    --accent-dim: rgba(0,149,179,0.08);
+    --accent2: #c47800;
+    --accent2-dim: rgba(196,120,0,0.08);
+    --green: #008c54;
+    --green-dim: rgba(0,140,84,0.08);
+    --red: #cc3333;
+    --red-dim: rgba(204,51,51,0.08);
+    --purple: #7c5cc7;
+    --purple-dim: rgba(124,92,199,0.08);
+    --code-bg: #f8f9fc;
+    --code-border: #e0e2ec;
+  }
+}
+:root[data-theme="dark"] {
+  --bg-deep: #0c0e1a;
+  --bg-card: #151829;
+  --bg-card-alt: #1a1d2e;
+  --bg-pill: #222635;
+  --border: #2a2e42;
+  --border-pill: #545353;
+  --text-primary: #e0e4ec;
+  --text-secondary: #8b90a5;
+  --text-dim: #5c6178;
+  --accent: #00d4ff;
+  --accent-dim: rgba(0,212,255,0.12);
+  --accent2: #ffb347;
+  --accent2-dim: rgba(255,179,71,0.10);
+  --green: #00e88a;
+  --green-dim: rgba(0,232,138,0.10);
+  --red: #ff5c5c;
+  --red-dim: rgba(255,92,92,0.10);
+  --purple: #a78bfa;
+  --purple-dim: rgba(167,139,250,0.10);
+  --code-bg: #0a0c16;
+  --code-border: #1e2236;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+
+.container { max-width: 960px; margin: 0 auto; padding: 0 24px; }
+
+/* Header */
+.header {
+  padding: 64px 0 48px;
+  text-align: center;
+  position: relative;
+}
+.header::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 80%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border), transparent);
+}
+.pill-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-pill);
+  border: 1px solid var(--border-pill);
+  border-radius: 100px;
+  padding: 8px 20px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--accent);
+  letter-spacing: 0.5px;
+  margin-bottom: 24px;
+}
+.pill-badge .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green);
+}
+.header h1 {
+  font-size: clamp(28px, 5vw, 42px);
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  line-height: 1.2;
+  margin-bottom: 12px;
+}
+.header h1 span { color: var(--accent); }
+.header .subtitle {
+  color: var(--text-secondary);
+  font-size: 16px;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+/* Floating bar mockup */
+.mockup-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  background: var(--bg-pill);
+  border: 1px solid var(--border-pill);
+  border-radius: 20px;
+  padding: 6px 4px;
+  margin: 28px auto 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: #d7d7d7;
+}
+.mockup-bar .metric {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+}
+.mockup-bar .metric .icon {
+  font-size: 13px;
+  opacity: 0.7;
+}
+
+/* Nav / TOC */
+.toc {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--bg-deep);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 0;
+  margin-bottom: 40px;
+}
+.toc-inner {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 0 24px;
+}
+.toc-inner::-webkit-scrollbar { display: none; }
+.toc a {
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-dim);
+  text-decoration: none;
+  padding: 6px 14px;
+  border-radius: 100px;
+  border: 1px solid transparent;
+  transition: all 0.2s;
+}
+.toc a:hover {
+  color: var(--accent);
+  border-color: var(--border);
+  background: var(--accent-dim);
+}
+
+/* Section */
+.section {
+  margin-bottom: 56px;
+}
+.section-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+.section h2 {
+  font-size: 24px;
+  font-weight: 700;
+  margin-bottom: 16px;
+  letter-spacing: -0.3px;
+}
+.section p {
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+
+/* Cards */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 16px;
+}
+.card h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.card p { color: var(--text-secondary); font-size: 14px; }
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+/* Metric cards in overview */
+.metric-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  position: relative;
+  overflow: hidden;
+}
+.metric-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 3px;
+  height: 100%;
+}
+.metric-card.time::before { background: var(--accent); }
+.metric-card.fps::before { background: var(--green); }
+.metric-card.net::before { background: var(--accent2); }
+.metric-card.bat::before { background: var(--purple); }
+.metric-card.dur::before { background: var(--red); }
+.metric-card .mc-icon { font-size: 24px; margin-bottom: 8px; }
+.metric-card h4 { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+.metric-card .mc-source {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+.metric-card .mc-detail {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+/* Tag */
+.tag {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+.tag.cyan { background: var(--accent-dim); color: var(--accent); }
+.tag.green { background: var(--green-dim); color: var(--green); }
+.tag.amber { background: var(--accent2-dim); color: var(--accent2); }
+.tag.purple { background: var(--purple-dim); color: var(--purple); }
+.tag.red { background: var(--red-dim); color: var(--red); }
+
+/* Code blocks */
+.code-section {
+  margin-bottom: 24px;
+}
+.code-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-card-alt);
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: 10px 10px 0 0;
+  padding: 10px 16px;
+  cursor: pointer;
+  user-select: none;
+}
+.code-header:hover { background: var(--bg-pill); }
+.code-header .file-name {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.code-header .file-meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.code-header .toggle-icon {
+  transition: transform 0.2s;
+  color: var(--text-dim);
+  font-size: 14px;
+}
+.code-header.collapsed .toggle-icon {
+  transform: rotate(-90deg);
+}
+.code-body {
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
+  border-radius: 0 0 10px 10px;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+}
+.code-body.collapsed {
+  max-height: 0 !important;
+  border: none;
+}
+.code-body pre {
+  margin: 0;
+  padding: 16px;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.65;
+  color: var(--text-primary);
+  tab-size: 4;
+}
+.code-annotation {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-top: none;
+  padding: 12px 16px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+.code-annotation strong { color: var(--text-primary); }
+.code-annotation code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: var(--bg-pill);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: var(--accent);
+}
+
+/* Architecture diagram */
+.arch-diagram {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 32px;
+  margin: 24px 0;
+  overflow-x: auto;
+}
+
+/* Data flow table */
+.flow-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin: 16px 0;
+}
+.flow-table th {
+  text-align: left;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+  padding: 8px 12px;
+  border-bottom: 2px solid var(--border);
+}
+.flow-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+  vertical-align: top;
+}
+.flow-table td:first-child {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent);
+  white-space: nowrap;
+}
+.flow-table tr:last-child td { border-bottom: none; }
+
+/* Unsupported list */
+.unsupported-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+  margin: 16px 0;
+}
+.unsupported-item {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  background: var(--bg-card-alt);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+.unsupported-item span { color: var(--red); }
+
+/* Inline code */
+code {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  background: var(--bg-pill);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+/* Summary list */
+.summary-list {
+  list-style: none;
+  margin: 16px 0;
+}
+.summary-list li {
+  padding: 8px 0 8px 20px;
+  position: relative;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+.summary-list li::before {
+  content: '›';
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* Footer */
+.footer {
+  text-align: center;
+  padding: 48px 0;
+  border-top: 1px solid var(--border);
+  margin-top: 40px;
+}
+.footer p {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+}
+
+@media (max-width: 640px) {
+  .container { padding: 0 16px; }
+  .header { padding: 40px 0 32px; }
+  .card-grid { grid-template-columns: 1fr; }
+  .unsupported-list { grid-template-columns: 1fr; }
+  .mockup-bar { font-size: 9px; }
+  .mockup-bar .metric { padding: 2px 6px; }
+}
+</style>
+
+<div class="container">
+  <!-- Header -->
+  <div class="header">
+    <div class="pill-badge"><span class="dot"></span> SYSTEM OVERLAY · TYPE 2008</div>
+    <h1>Performance Monitor<br><span>Floating Bar</span></h1>
+    <p class="subtitle">Deep dive into the translucent pill-shaped overlay that displays real-time game metrics during gameplay on the RedMagic 10 Pro (NX789J)</p>
+    <div class="mockup-bar">
+      <div class="metric"><span class="icon">🕐</span> 14:32</div>
+      <div class="metric"><span class="icon">📊</span> 60FPS</div>
+      <div class="metric"><span class="icon">📶</span> 1.24 MB/S</div>
+      <div class="metric"><span class="icon">🔋</span> 87%</div>
+      <div class="metric"><span class="icon">⏱️</span> 1.5h</div>
+    </div>
+  </div>
+
+  <!-- TOC -->
+  <div class="toc">
+    <div class="toc-inner">
+      <a href="#overview">Overview</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#metrics">Five Metrics</a>
+      <a href="#window">Window System</a>
+      <a href="#interaction">Interaction</a>
+      <a href="#lifecycle">Lifecycle</a>
+      <a href="#source-main">Source: FloatingWindow</a>
+      <a href="#source-ctrl">Source: Controller</a>
+      <a href="#source-status">Source: StatusView</a>
+      <a href="#source-fps">Source: FpsTick</a>
+      <a href="#source-corner">Source: CornerRectangle</a>
+      <a href="#source-layout">Source: Layouts</a>
+      <a href="#source-support">Source: Support Classes</a>
+    </div>
+  </div>
+
+  <!-- Section: Overview -->
+  <div class="section" id="overview">
+    <div class="section-label">01 — Overview</div>
+    <h2>What is the Performance Monitor?</h2>
+    <p>The Performance Monitor is a system overlay floating bar that appears during gameplay to show five real-time metrics. It renders as a translucent dark pill (<code>#222635</code> fill, <code>#545353</code> stroke, 20px corner radius) on top of the game surface. Users toggle it from the GameAssist sidebar tile.</p>
+
+    <div class="card">
+      <h3>💡 Key Clarification</h3>
+      <p>The bar displays <strong>current time</strong>, <strong>FPS</strong>, <strong>network speed</strong>, <strong>battery percentage (%)</strong>, and <strong>game play duration</strong> (hours). It does <strong>not</strong> show "remaining battery time" — the 5th panel shows how long the current game session has lasted (e.g. "1.5h"), which may be what was mistaken for a battery-time estimate.</p>
+    </div>
+
+    <div class="card-grid">
+      <div class="metric-card time">
+        <div class="mc-icon">🕐</div>
+        <h4>Current Time</h4>
+        <div class="mc-source">PerformanceMonitorClock (TextClock)</div>
+        <div class="mc-detail">Forced 24-hour format via <code>is24HourModeEnabled() → true</code>. Uses system TextClock — auto-updates every minute.</div>
+      </div>
+      <div class="metric-card fps">
+        <div class="mc-icon">📊</div>
+        <h4>Frame Rate (FPS)</h4>
+        <div class="mc-source">FpsTick → FpsDetectManager (Binder IPC)</div>
+        <div class="mc-detail">System-level FPS detection via <code>com.zte.performance.fpsTicker</code> service. Cross-process Binder callback delivers <code>onFps(int fps, float, String pkg, String surface)</code>.</div>
+      </div>
+      <div class="metric-card net">
+        <div class="mc-icon">📶</div>
+        <h4>Network Speed</h4>
+        <div class="mc-source">TrafficStats API (polled every 1s)</div>
+        <div class="mc-detail">Background thread polls <code>getTotalRxBytes() + getTotalTxBytes()</code> each second. Calculates delta and formats as KB/S, MB/S, or GB/S.</div>
+      </div>
+      <div class="metric-card bat">
+        <div class="mc-icon">🔋</div>
+        <h4>Battery Level (%)</h4>
+        <div class="mc-source">BatteryManager + BATTERY_CHANGED broadcast</div>
+        <div class="mc-detail">Initial read via <code>BatteryManager.getIntProperty(4)</code> (BATTERY_PROPERTY_CAPACITY). Ongoing updates from <code>ACTION_BATTERY_CHANGED</code> broadcast: <code>level * 100 / scale</code>.</div>
+      </div>
+      <div class="metric-card dur">
+        <div class="mc-icon">⏱️</div>
+        <h4>Game Play Duration</h4>
+        <div class="mc-source">GameDurationManager (elapsed time)</div>
+        <div class="mc-detail">Tracks per-game session time via <code>SystemClock.elapsedRealtime()</code>. Formats as decimal hours (e.g. "1.5h"). Updated every 60 seconds via <code>mTimeChangeRunnable</code>.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section: Architecture -->
+  <div class="section" id="architecture">
+    <div class="section-label">02 — Architecture</div>
+    <h2>Class Hierarchy & Data Flow</h2>
+
+    <div class="arch-diagram">
+      <pre class="mermaid">
+graph TB
+    subgraph Toggle["Toggle Path"]
+        Tile["PerformanceMonitorTile<br/><small>Sidebar toggle tile</small>"]
+        Proxy["PerformanceMonitorTileProxy<br/><small>SharedPrefs read/write</small>"]
+        SPF[("SharedPreferences<br/>spf_performance_monitor")]
+    end
+
+    subgraph Controller["Controller Layer"]
+        PMC["PerformanceMonitorController<br/><small>Singleton · GameMonitor.Callback</small>"]
+        PMWC["PerformanceMonitorWindowController<br/><small>Duration timer · window holder</small>"]
+    end
+
+    subgraph Window["Floating Window"]
+        PMFW["PerformanceMonitorFloatingWindow<br/><small>1098 lines · core UI class</small>"]
+        CR["CornerRectangle<br/><small>Rounded pill background</small>"]
+        PML["PerformanceMonitorLayout<br/><small>Custom LinearLayout</small>"]
+    end
+
+    subgraph DataSources["Data Sources"]
+        FPS["FpsTick<br/><small>IFpsTickCallback.Stub</small>"]
+        FDM["FpsDetectManager<br/><small>System Binder service</small>"]
+        PSV_N["PerformanceStatusView<br/><small>Network mode</small>"]
+        PSV_B["PerformanceStatusView<br/><small>Battery mode</small>"]
+        TS["TrafficStats API"]
+        BM["BatteryManager<br/>+ BATTERY_CHANGED"]
+        GDM["GameDurationManager<br/><small>TopActivityMonitor callback</small>"]
+        TC["PerformanceMonitorClock<br/><small>TextClock · 24h forced</small>"]
+    end
+
+    Tile --> Proxy
+    Proxy --> SPF
+    Proxy -->|"register/unregister"| PMC
+    PMC -->|"creates"| PMWC
+    PMWC -->|"creates"| PMFW
+    PMFW --> CR
+    PMFW --> PML
+    PMFW --> TC
+    FPS -->|"Binder IPC"| FDM
+    PMFW -->|"registers"| FPS
+    PMFW --> PSV_N
+    PMFW --> PSV_B
+    PSV_N -->|"polls 1s"| TS
+    PSV_B -->|"broadcast"| BM
+    PMWC -->|"polls 60s"| GDM
+
+    style Toggle fill:#1a1d2e,stroke:#2a2e42,color:#e0e4ec
+    style Controller fill:#1a1d2e,stroke:#2a2e42,color:#e0e4ec
+    style Window fill:#1a1d2e,stroke:#2a2e42,color:#e0e4ec
+    style DataSources fill:#1a1d2e,stroke:#2a2e42,color:#e0e4ec
+      </pre>
+    </div>
+
+    <div class="card">
+      <h3>📁 File Map</h3>
+      <div style="overflow-x:auto;">
+        <table class="flow-table">
+          <thead><tr><th>File</th><th>Lines</th><th>Role</th></tr></thead>
+          <tbody>
+            <tr><td>PerformanceMonitorFloatingWindow.java</td><td>1098</td><td>Core UI — window creation, touch handling, collapse/expand animations, FPS/data binding, position persistence</td></tr>
+            <tr><td>PerformanceMonitorController.java</td><td>411</td><td>Singleton lifecycle manager — GameMonitor.Callback, status bar events, toggle migration, analytics tracking</td></tr>
+            <tr><td>PerformanceMonitorWindowController.java</td><td>136</td><td>Intermediate holder — owns the FloatingWindow instance, manages 60-second game duration timer</td></tr>
+            <tr><td>PerformanceStatusView.java</td><td>143</td><td>Dual-mode custom TextView — network speed polling OR battery level broadcast, determined by XML attribute</td></tr>
+            <tr><td>FpsTick.java</td><td>36</td><td>Binder stub for FPS callbacks — registers/unregisters with system FpsDetectManager service</td></tr>
+            <tr><td>CornerRectangle.java</td><td>94</td><td>Custom View — pill-shaped rounded rect background with animated width changes</td></tr>
+            <tr><td>PerformanceMonitorClock.java</td><td>42</td><td>TextClock subclass — forces 24-hour mode, safe onDetachedFromWindow</td></tr>
+            <tr><td>PerformanceMonitorLayout.java</td><td>44</td><td>Custom LinearLayout — applies left/right offset to children for tighter metric packing</td></tr>
+            <tr><td>PerformanceMonitorTile.java</td><td>70</td><td>GameAssist sidebar tile — AI agent commands, icon swap</td></tr>
+            <tr><td>PerformanceMonitorTileProxy.java</td><td>91</td><td>Toggle proxy — SharedPreferences write, overlay permission check, game scene gate</td></tr>
+            <tr><td>UseTimeUtils.java</td><td>52</td><td>Time formatting — ms to decimal hours, ms to minutes, game launcher app list query</td></tr>
+            <tr><td>GameDurationManager.java</td><td>416</td><td>Per-game session timer — TopActivityMonitor callback, multi-display aware, keyguard handling</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section: Five Metrics Deep Dive -->
+  <div class="section" id="metrics">
+    <div class="section-label">03 — Five Metrics</div>
+    <h2>How Each Metric Works</h2>
+
+    <!-- Time -->
+    <div class="card">
+      <h3><span class="tag cyan">PANEL 0</span> Current Time</h3>
+      <p><strong>View type:</strong> <code>PerformanceMonitorClock</code> extends <code>TextClock</code></p>
+      <p><strong>How it works:</strong> Android's <code>TextClock</code> auto-updates its text from the system clock. The subclass overrides <code>is24HourModeEnabled()</code> to always return <code>true</code>, forcing 24-hour display (e.g. "14:32") regardless of user locale settings. It also wraps <code>onDetachedFromWindow()</code> in a try-catch to prevent crash-on-remove edge cases.</p>
+      <p><strong>Update frequency:</strong> Automatic via Android framework (every minute).</p>
+      <p><strong>Layout XML:</strong> <code>layout_monitor_current_time.xml</code> — ImageView icon + PerformanceMonitorClock, text color <code>#FFD7D7D7</code>.</p>
+    </div>
+
+    <!-- FPS -->
+    <div class="card">
+      <h3><span class="tag green">PANEL 1</span> Frame Rate (FPS)</h3>
+      <p><strong>View type:</strong> Plain <code>TextView</code> (id: <code>frame_rate</code>)</p>
+      <p><strong>Data source:</strong> <code>FpsTick</code> → system <code>FpsDetectManager</code> via Binder IPC</p>
+      <p><strong>How it works:</strong></p>
+      <ul class="summary-list">
+        <li><code>FpsTick</code> extends <code>IFpsTickCallback.Stub</code> — a Binder stub for cross-process callbacks</li>
+        <li>On <code>addFloatView()</code>, calls <code>FpsTick.register()</code> which invokes <code>FpsDetectManager.getInstance().registerCallback(this)</code></li>
+        <li>The system's <code>com.zte.performance.fpsTicker</code> service starts delivering FPS data</li>
+        <li>Callback signature: <code>onFps(int fps, float unknown, String packageName, String surfaceName)</code></li>
+        <li>The anonymous inner class <code>AnonymousClass2</code> overrides <code>onFps()</code> — checks the FPS value changed AND the package matches, then posts <code>updateFps()</code> to the main thread</li>
+        <li>Display format: <code>R.string.frame_rate_template</code> with the FPS integer (e.g. " 60FPS")</li>
+      </ul>
+      <p><strong>Unsupported FPS apps:</strong> For streaming/remote-play apps, the bar shows <code>"--FPS"</code> because the actual game runs remotely:</p>
+      <div class="unsupported-list">
+        <div class="unsupported-item"><span>×</span> com.tencent.start</div>
+        <div class="unsupported-item"><span>×</span> com.nvidia.geforcenow</div>
+        <div class="unsupported-item"><span>×</span> com.netease.uuremote</div>
+        <div class="unsupported-item"><span>×</span> com.valvesoftware.steamlink</div>
+        <div class="unsupported-item"><span>×</span> com.playstation.remoteplay</div>
+        <div class="unsupported-item"><span>×</span> com.microsoft.xboxone.smartglass</div>
+        <div class="unsupported-item"><span>×</span> com.sand.airdroid</div>
+        <div class="unsupported-item"><span>×</span> com.sand.airmirror</div>
+        <div class="unsupported-item"><span>×</span> com.limelight (Moonlight)</div>
+        <div class="unsupported-item"><span>×</span> com.xiaoji.egggame.redmagic</div>
+        <div class="unsupported-item"><span>×</span> com.xiaoji.egggame</div>
+        <div class="unsupported-item"><span>×</span> com.xunlei.downloadprovider</div>
+      </div>
+    </div>
+
+    <!-- Network -->
+    <div class="card">
+      <h3><span class="tag amber">PANEL 2</span> Network Speed</h3>
+      <p><strong>View type:</strong> <code>PerformanceStatusView</code> with <code>app:isBatteryLevelType="false"</code></p>
+      <p><strong>How it works:</strong></p>
+      <ul class="summary-list">
+        <li>A background-thread <code>Handler</code> posts <code>mRefreshRunnable</code> every 1000ms</li>
+        <li>Each tick reads <code>TrafficStats.getTotalRxBytes() + getTotalTxBytes()</code> — total device network traffic (all interfaces)</li>
+        <li>Speed = <code>(currentBytes − lastBytes) / ((currentTimeMs − lastTimeMs) / 1000.0f)</code> in bytes/sec</li>
+        <li>Adaptive formatting method <code>c(float)</code>:
+          <br>• &lt; 10 KB → <code>"X.XX KB/S"</code>
+          <br>• &lt; 100 KB → <code>"XX.X KB/S"</code>
+          <br>• &lt; 1000 KB → <code>"XXX KB/S"</code>
+          <br>• &lt; 10 MB → <code>"X.XX MB/S"</code>
+          <br>• &lt; 100 MB → <code>"XX.X MB/S"</code>
+          <br>• &lt; 1000 MB → <code>"XXX MB/S"</code>
+          <br>• ≥ 1 GB → <code>"X.XX GB/S"</code>
+        </li>
+        <li>Only posts UI update if <code>currentBytes != lastBytes</code> (avoids unnecessary redraws when idle)</li>
+        <li>Handles <code>Infinity</code> / <code>NaN</code> edge case → falls back to <code>"0.00 KB/S"</code></li>
+      </ul>
+    </div>
+
+    <!-- Battery -->
+    <div class="card">
+      <h3><span class="tag purple">PANEL 3</span> Battery Level</h3>
+      <p><strong>View type:</strong> <code>PerformanceStatusView</code> with <code>app:isBatteryLevelType="true"</code></p>
+      <p><strong>How it works:</strong></p>
+      <ul class="summary-list">
+        <li>On start (<code>h()</code>): reads initial level via <code>BatteryManager.getIntProperty(4)</code> — constant 4 is <code>BATTERY_PROPERTY_CAPACITY</code> (percentage 0–100)</li>
+        <li>Registers a <code>BroadcastReceiver</code> for <code>ACTION_BATTERY_CHANGED</code></li>
+        <li>On each broadcast: <code>level = intent.getIntExtra("level", 0) * 100 / intent.getIntExtra("scale", 100)</code></li>
+        <li>Display format: <code>R.string.battery_level_template</code> with integer percentage (e.g. " 87%")</li>
+        <li>Receiver registered with flag <code>2</code> (<code>RECEIVER_NOT_EXPORTED</code>)</li>
+      </ul>
+      <p><strong>Note:</strong> This is <em>battery percentage</em>, not remaining time. The code has no discharge rate estimation.</p>
+    </div>
+
+    <!-- Game Duration -->
+    <div class="card">
+      <h3><span class="tag red">PANEL 4</span> Game Play Duration</h3>
+      <p><strong>View type:</strong> Plain <code>TextView</code> (id: <code>performance_monitor_game_duration</code>)</p>
+      <p><strong>Data source:</strong> <code>GameDurationManager</code> → <code>PerformanceMonitorWindowController</code></p>
+      <p><strong>How it works:</strong></p>
+      <ul class="summary-list">
+        <li><code>GameDurationManager</code> is a singleton that implements <code>TopActivityMonitor.FullActivityResumedCallback</code></li>
+        <li>It tracks game start/stop via <code>SystemClock.elapsedRealtime()</code> and accumulates per-package play time in a HashMap</li>
+        <li>Special handling for WeChat mini-games: <code>com.tencent.mm</code> with non-zero hash gets a compound key <code>pkg@hash</code></li>
+        <li><code>PerformanceMonitorWindowController</code> polls every 60 seconds via <code>mTimeChangeRunnable</code>: calls <code>GameDurationManager.p(pkg, callback)</code></li>
+        <li>The manager calculates live time: <code>storedTime + (elapsedRealtime − startTime)</code> and delivers via <code>CallBack.onBundlePrepare(Bundle)</code></li>
+        <li><code>UseTimeUtils.msToH(ms)</code> converts to decimal hours: <code>minutes / 60.0</code> formatted as <code>"0.0"</code> (≥ 0.1h) or <code>"0.00"</code> (&lt; 0.1h)</li>
+        <li>Display: <code>R.string.game_duration_template</code> (e.g. " 1.5h")</li>
+        <li>If the process is no longer running (<code>q(pkg, pid)</code> returns false), sends <code>null</code> bundle — duration display freezes at last known value</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Section: Window System -->
+  <div class="section" id="window">
+    <div class="section-label">04 — Window System</div>
+    <h2>System Overlay Window</h2>
+
+    <div class="card">
+      <h3>🪟 Window Parameters</h3>
+      <div style="overflow-x:auto;">
+        <table class="flow-table">
+          <thead><tr><th>Parameter</th><th>Value</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td>type</td><td>2008 (game) / 2027 (host)</td><td>TYPE_PHONE for game overlay, TYPE_NAVIGATION_BAR_PANEL for host/mirror mode</td></tr>
+            <tr><td>flags</td><td>75826952</td><td>NOT_FOCUSABLE | NOT_TOUCH_MODAL | LAYOUT_IN_SCREEN | LAYOUT_NO_LIMITS (combined)</td></tr>
+            <tr><td>format</td><td>-3</td><td>TRANSLUCENT pixel format</td></tr>
+            <tr><td>gravity</td><td>51 (TOP|LEFT)</td><td>Position from top-left corner</td></tr>
+            <tr><td>title</td><td>"PerformanceMonitorFloatingWindow" or "...Host"</td><td>Window title for debugging</td></tr>
+            <tr><td>privateFlags</td><td>COLOR_SPACE_AGNOSTIC + HIDE_TRUSTED_OVERLAY</td><td>ZTE-specific extensions for overlay rendering</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>📐 Two Layout Modes</h3>
+      <p><strong>Open (Full) mode:</strong> <code>performance_monitor_layout.xml</code></p>
+      <ul class="summary-list">
+        <li>FrameLayout root containing <code>CornerRectangle</code> (background) + <code>PerformanceMonitorLayout</code> (horizontal LinearLayout with 5 include children)</li>
+        <li>All 5 panels visible side by side: time | FPS | network | battery | duration</li>
+        <li>Each panel is a LinearLayout with ImageView icon + data TextView/View</li>
+        <li>Width: <code>R.integer.performance_monitor_window_width</code></li>
+      </ul>
+      <p><strong>Shorten (Collapsed) mode:</strong> <code>layout_monitor_shorten.xml</code></p>
+      <ul class="summary-list">
+        <li>FrameLayout root with only <code>CornerRectangle</code> background</li>
+        <li>On collapse, one panel's layout is dynamically added as a child</li>
+        <li>Width: the clicked panel's width (stored as <code>mShortenWindowWidth</code>)</li>
+        <li>Tap the collapsed bar → expands back to full mode</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3>🎨 CornerRectangle — The Pill Background</h3>
+      <p>Custom <code>View</code> that draws the translucent rounded rectangle behind the metrics.</p>
+      <ul class="summary-list">
+        <li>Fill color: <code>#FF222635</code> (dark navy-grey)</li>
+        <li>Stroke color: <code>#FF545353</code> (subtle grey border), width 2px</li>
+        <li>Corner radius: 20px default</li>
+        <li><code>setRectanglePara(left, width)</code> and <code>setRectanglePara(left, width, radius)</code> — used during collapse/expand animation to smoothly resize the background pill</li>
+        <li>Insets the RectF by 1px to keep the stroke fully visible</li>
+        <li>Both a fill pass and a stroke pass are drawn in <code>onDraw()</code></li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3>✨ Position & Persistence</h3>
+      <p>Saved to SharedPreferences after every drag:</p>
+      <div style="overflow-x:auto;">
+        <table class="flow-table">
+          <thead><tr><th>Key</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td>xPosition</td><td>X coordinate of the open (full) bar</td></tr>
+            <tr><td>xPosition_short</td><td>X coordinate when collapsed to single metric</td></tr>
+            <tr><td>yPosition</td><td>Y coordinate (shared between both modes)</td></tr>
+            <tr><td>orientation_when_move</td><td>Screen orientation at time of last drag</td></tr>
+            <tr><td>orientation_rotate</td><td>Screen orientation at time of last rotation swap</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>On orientation change: if the saved orientation doesn't match current, swaps X↔Y coordinates (<code>tranPositionValue()</code>) and clamps to screen bounds.</p>
+    </div>
+  </div>
+
+  <!-- Section: Interaction -->
+  <div class="section" id="interaction">
+    <div class="section-label">05 — Interaction</div>
+    <h2>Touch Handling & Animation</h2>
+
+    <div class="card">
+      <h3>👆 Touch Logic (method <code>C(MotionEvent)</code>)</h3>
+      <p>The entire floating bar is a touch target with drag-to-move and tap-to-collapse behavior:</p>
+      <ul class="summary-list">
+        <li><strong>ACTION_DOWN:</strong> Records start position (<code>rawX</code>/<code>rawY</code>), cancels auto-fade timer</li>
+        <li><strong>ACTION_MOVE:</strong> Updates <code>mPointX</code>/<code>mPointY</code>, calls <code>checkLayoutParams()</code> to clamp within screen bounds, then <code>updateViewLayout()</code> to reposition</li>
+        <li><strong>ACTION_UP:</strong> If total drag distance &lt; 24px (Euclidean), treated as a <strong>tap</strong> → triggers collapse/expand. Otherwise treated as a <strong>drag</strong> → saves position to SharedPreferences</li>
+        <li>Tap detection: <code>√((endX−startX)² + (endY−startY)²) &lt; 24²</code></li>
+        <li>Guard: if animation is running (<code>mIsAnimationRunning</code>), ignores all touch events</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3>📦 Tap-to-Collapse (method <code>N(float x)</code>)</h3>
+      <p>When the user taps the open bar:</p>
+      <ul class="summary-list">
+        <li>Calculates which of the 5 panels was hit via <code>A(float x)</code> — divides bar width into 5 equal zones</li>
+        <li>Stores the tapped index as <code>mLastClickIndex</code></li>
+        <li>Calculates the panel's X offset, adjusts window position so the tapped panel stays in place</li>
+        <li>Sets window width to that single panel's width</li>
+        <li>Calls <code>V(false)</code> to play the collapse animation</li>
+      </ul>
+      <p>When the user taps the collapsed bar:</p>
+      <ul class="summary-list">
+        <li>Gets the collapsed panel's X position</li>
+        <li>Adjusts window X so the full bar re-centers around where the collapsed panel was</li>
+        <li>Sets window width back to full</li>
+        <li>Calls <code>V(true)</code> to play the expand animation</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3>🎬 Animation (method <code>V(boolean expand)</code>)</h3>
+      <p>Two synchronized AnimatorSets run simultaneously:</p>
+      <ul class="summary-list">
+        <li><strong>Main set</strong> — translationX animations for each panel:
+          <br>Panels to the left of tapped slide left; panels to the right slide right
+          <br>Plus a ValueAnimator on the <code>CornerRectangle</code> width (pill shrinks/grows)
+          <br>Collapse: <code>AccelerateInterpolator</code>, 100ms
+          <br>Expand: <code>OvershootInterpolator(0.5f)</code>, 300ms (bouncy feel)</li>
+        <li><strong>Alpha set</strong> — fades out/in the non-tapped panels:
+          <br>Collapse fade-out: 100ms
+          <br>Expand fade-in: 50ms</li>
+        <li>On collapse animation end: calls <code>addOpenOrShortenWindow(true)</code> — removes the full layout from WindowManager, adds the shorten layout with the single chosen panel</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3>👻 Auto-Fade</h3>
+      <p>5 seconds after the last touch (or after initial display), the bar fades to 50% alpha via <code>mFadeRunnable</code>. Any touch cancels the timer and restores full opacity. When the user lifts their finger, the 5-second countdown resets.</p>
+    </div>
+  </div>
+
+  <!-- Section: Lifecycle -->
+  <div class="section" id="lifecycle">
+    <div class="section-label">06 — Lifecycle</div>
+    <h2>Toggle → Display → Removal</h2>
+
+    <div class="card">
+      <h3>🔄 Complete Flow</h3>
+      <ol class="summary-list" style="list-style:none; counter-reset:step;">
+        <li style="counter-increment:step;"><strong>1. User toggles tile ON</strong> → <code>PerformanceMonitorTileProxy.m(0)</code>
+          <br>Checks overlay permission (<code>Utils.c()</code>), game scene (<code>SystemMgr.H()</code>)
+          <br>Writes <code>SharedPreferencesUtil("spf_performance_monitor", 1)</code>
+          <br>Calls <code>PerformanceMonitorController.register(true)</code></li>
+        <li style="counter-increment:step;"><strong>2. Controller registers</strong> → Creates <code>PerformanceMonitorWindowController</code> if needed
+          <br>Calls <code>addFloatView(SystemMgr.t())</code> — the current game package name
+          <br>Records <code>mTrackBeginTime</code> for analytics</li>
+        <li style="counter-increment:step;"><strong>3. WindowController starts</strong> → Calls <code>PerformanceMonitorFloatingWindow.addFloatView(pkg)</code>
+          <br>Starts 60-second duration timer via <code>mTimeChangeRunnable</code>
+          <br>Requests initial game duration from <code>GameDurationManager.p(pkg, callback)</code></li>
+        <li style="counter-increment:step;"><strong>4. FloatingWindow initializes</strong> →
+          <br>• <code>H()</code> — reads window dimensions from resources
+          <br>• <code>F()</code> — selects open or shorten layout, starts PerformanceStatusView monitoring
+          <br>• <code>G()</code> — creates WindowManager.LayoutParams (type 2008/2027)
+          <br>• <code>Y()</code> — restores saved position from SharedPreferences
+          <br>• <code>w()</code> — clamps position to screen bounds
+          <br>• Adds view via <code>WindowManagerUtil.a(view, params)</code>
+          <br>• Calls <code>E(pkg)</code> — checks unsupported FPS apps, registers FpsTick
+          <br>• Refreshes TextClock, registers DisplayMgr callback
+          <br>• Starts auto-fade timer</li>
+        <li style="counter-increment:step;"><strong>5. Game runs</strong> → FPS, network, battery update in real-time; duration every 60s</li>
+        <li style="counter-increment:step;"><strong>6. Game stops / toggle OFF</strong> → <code>removeFloatView()</code>
+          <br>• <code>PerformanceStatusView.j()</code> — stops network polling, unregisters battery receiver
+          <br>• <code>FpsTick.unRegister()</code> — detaches from FpsDetectManager
+          <br>• Removes fade callback
+          <br>• Removes all views from WindowManager
+          <br>• Analytics: logs app_name, size (all/single), item name, duration to NubiaTrackManager</li>
+      </ol>
+    </div>
+
+    <div class="card">
+      <h3>🎮 Game Lifecycle Integration</h3>
+      <p><code>PerformanceMonitorController</code> implements <code>GameMonitor.Callback</code>:</p>
+      <ul class="summary-list">
+        <li><code>onGameStart()</code> → if toggle is on, delays <code>addFloatView</code> by 800ms (normal) or 1100ms (first activity create)</li>
+        <li><code>onGameStop()</code> → removes float view, cancels pending add</li>
+        <li><code>onGameUpdate()</code> → updates the current package name on the existing window</li>
+        <li><code>executive("statusbar_show"/"statusbar_hide")</code> → adjusts position constraints for fullscreen mode changes</li>
+      </ul>
+      <p>Also implements <code>HostMonitor.Callback</code> for dual-screen/mirror display support — creates a separate window on the secondary display.</p>
+    </div>
+
+    <div class="card">
+      <h3>📊 Analytics Tracking</h3>
+      <p>On every unregister (toggle off or game exit), logs to <code>NubiaTrackManager</code>:</p>
+      <ul class="summary-list">
+        <li><code>app_name</code> — current game package</li>
+        <li><code>size</code> — "all" (full bar) or "single" (collapsed)</li>
+        <li><code>item</code> — if collapsed, which metric: "current_time", "framerate", "speed", "electricity", "play_time"</li>
+        <li><code>duration</code> — seconds the bar was active, formatted as "X.X"</li>
+        <li>Tracked to event <code>"performance_board_used"</code> under package <code>"cn.nubia.gamelauncher"</code></li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- SOURCE CODE SECTIONS                        -->
+  <!-- ═══════════════════════════════════════════ -->
+
+  <!-- Source: FloatingWindow -->
+  <div class="section" id="source-main">
+    <div class="section-label">07 — Source Code</div>
+    <h2>PerformanceMonitorFloatingWindow.java</h2>
+    <p>The core 1098-line class that creates, manages, and animates the floating overlay. Click the header to expand/collapse.</p>
+
+    <div class="code-section">
+      <div class="code-header" onclick="toggleCode(this)">
+        <span class="file-name">PerformanceMonitorFloatingWindow.java</span>
+        <span class="file-meta"><span class="tag green">1098 LINES</span> <span class="toggle-icon">▼</span></span>
+      </div>
+      <div class="code-body collapsed" style="max-height: none;">
+        <pre>package cn.nubia.gameassist.dessert.policy.performancemonitor;
+
+import android.animation.Animator;
+import android.animation.AnimatorSet;
+import android.animation.ObjectAnimator;
+import android.animation.ValueAnimator;
+import android.content.Context;
+import android.database.ContentObserver;
+import android.net.Uri;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.provider.Settings;
+import android.text.TextUtils;
+import android.view.LayoutInflater;
+import android.view.MotionEvent;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.WindowManager;
+import android.view.animation.AccelerateInterpolator;
+import android.view.animation.OvershootInterpolator;
+import android.widget.FrameLayout;
+import android.widget.LinearLayout;
+import android.widget.TextClock;
+import android.widget.TextView;
+import cn.nubia.gameassist.R;
+import cn.nubia.gameassist.common.GameDurationManager;
+import cn.nubia.gameassist.dessert.policy.performancemonitor.fpsTicker.FpsTick;
+import cn.nubia.gameassist.dessert.policy.performancemonitor.present.UseTimeUtils;
+import cn.nubia.gameassist.panel.GameAssistWindowManager;
+import cn.nubia.gameassist.performance.PerformanceStatusView;
+import cn.nubia.gameassist.utils.Utils;
+import cn.nubia.gameassist.utils.WindowManagerUtil;
+import cn.nubia.hostassist.HostAssistMgr;
+import cn.nubia.hostassist.HostDensityHelper;
+import cn.nubia.multisubscreen.utils.MultiSubScreenUtils;
+import com.zte.gameassist.common.DisplayMgr;
+import com.zte.gameassist.common.FoldMgr;
+import com.zte.gameassist.common.InflaterHelper;
+import com.zte.gameassist.common.SystemMgr;
+import com.zte.gameassist.ext.common.MutableData;
+import com.zte.gameassist.utils.GaLog;
+import com.zte.gameassist.utils.SharedPreferencesUtil;
+import com.zte.shared.wrapper.WindowManagerWrapper;
+import java.io.PrintWriter;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Locale;
+
+public class PerformanceMonitorFloatingWindow implements GameDurationManager.CallBack {
+
+    // ═══════ Unsupported FPS apps (streaming/remote play) ═══════
+    private static final List v0 = Arrays.asList(
+        "com.tencent.start", "com.nvidia.geforcenow", "com.netease.uuremote",
+        "com.valvesoftware.steamlink", "com.playstation.remoteplay",
+        "com.microsoft.xboxone.smartglass", "com.sand.airdroid",
+        "com.sand.airmirror", "com.limelight",
+        "com.xiaoji.egggame.redmagic", "com.xiaoji.egggame",
+        "com.xunlei.downloadprovider"
+    );
+
+    // ═══════ View references ═══════
+    // Open (full) layout views:
+    private PerformanceStatusView A;        // Battery level (open)
+    private TextView B;                      // Game duration (open)
+    private TextClock x;                     // Current time (open)
+    private TextView y;                      // FPS (open)
+    private PerformanceStatusView z;         // Net speed (open)
+
+    // Shorten (collapsed) layout views:
+    private TextClock C;                     // Current time (shorten)
+    private TextView D;                      // FPS (shorten)
+    private PerformanceStatusView E;         // Net speed (shorten)
+    private PerformanceStatusView F;         // Battery level (shorten)
+    private TextView G;                      // Game duration (shorten)
+
+    // ═══════ Layout containers ═══════
+    private ViewGroup f6418k;                // mFloatLayout — current active layout
+    private FrameLayout f6419l;              // mOpenLayout — full 5-panel layout
+    private LinearLayout f6420m;             // mContentLayout — inner horizontal layout
+    private CornerRectangle f6421n;          // mOpenMonitorBackgroundView
+    private CornerRectangle f6422o;          // mShortenMonitorBackgroundView
+    private FrameLayout f6423p;             // mShortenLayout — collapsed layout
+    private LinearLayout f6424q;             // Individual panel: current time
+    private LinearLayout f6425r;             // Individual panel: frame rate
+    private LinearLayout f6426s;             // Individual panel: net speed
+    private LinearLayout t;                  // Individual panel: electricity
+    private LinearLayout u;                  // Individual panel: game duration
+
+    // ═══════ Dimensions ═══════
+    private int I;     // mViewsSize — number of panels (5)
+    private int J;     // Full window width (from resources)
+    private int K;     // Window height (from resources)
+    private int L;     // mWindowWidth — current working width
+    private int M;     // mWindowHeight — current working height
+    private int N;     // Host screen width
+    private int O;     // Host screen height
+    private int P;     // Special electricity view width (Vietnamese locale)
+    private int Q;     // Special current time view width (Thai locale)
+    private int R;     // mShortenWindowWidth — collapsed mode width
+
+    // ═══════ State ═══════
+    private boolean U;                       // mIsViewGroupShorten
+    private int V = -1;                      // mLastClickIndex
+    private boolean f6415h;                  // mWindowAdd — is window currently added
+    private boolean f6416i;                  // mIsAnimationRunning
+    private boolean i0;                      // mHostDisplay — is this a host/mirror window
+    private boolean l0;                      // mIsFullScreen
+    private boolean h0;                      // hasDownEvent — touch state
+    private boolean m0 = false;              // mIsFoldChange
+    private boolean t0 = true;               // fade enabled
+
+    // ═══════ Touch/Position ═══════
+    private float f6414c;                    // Animation translation distance
+    private int S = 200;                     // mPointX — current X position
+    private int T = 100;                     // mPointY — current Y position
+    private float W = 0.0f;                  // mLastMoveX
+    private float X = 0.0f;                  // mLastMoveY
+    private float Y = 0.0f;                  // mTouchX — touch offset
+    private float Z = 0.0f;                  // mTouchY — touch offset
+    private float a0;                        // mDownY (raw)
+    private float b0;                        // mDownX (raw)
+    private float c0;                        // mUpY (raw)
+    private float d0;                        // mUpX (raw)
+    private int e0;                          // Space up/down (game mode)
+    private int f0;                          // Space up/down (host mode)
+    private int g0;                          // mOrientation
+
+    // ═══════ Context ═══════
+    private Context f6417j;
+    private WindowManager.LayoutParams v;
+    private WindowManagerUtil w;
+    private SharedPreferencesUtil k0;
+    public String mCurPkg = "";
+    private int j0;                          // mFps — last FPS value
+    private ArrayList H = new ArrayList();   // Panel views list
+    private HashSet n0 = new HashSet();      // Added views set
+    private Handler o0 = new Handler(Looper.getMainLooper());
+
+    // ═══════ Content observer for mirror app changes ═══════
+    private ContentObserver p0 = new ContentObserver(this.o0) {
+        @Override
+        public void onChange(boolean z, Uri uri) {
+            super.onChange(z);
+            if (Settings.Global.getUriFor("app_mirror_list").equals(uri)) {
+                PerformanceMonitorFloatingWindow.this.D();
+            }
+        }
+    };
+
+    // ═══════ FPS callback (Binder IPC) ═══════
+    private FpsTick q0 = new AnonymousClass2();
+
+    // ═══════ Display callback (multi-display support) ═══════
+    private DisplayMgr.Callback r0 = new DisplayMgr.Callback() {
+        @Override
+        public void on3DDisplayAdded(int i2) { super.on3DDisplayAdded(i2); }
+        @Override
+        public void on3DDisplayRemoved(int i2) { super.on3DDisplayRemoved(i2); }
+        @Override
+        public void onDisplayAdded(final int i2) {
+            PerformanceMonitorFloatingWindow.this.K(new Runnable() {
+                public void run() {
+                    if (PerformanceMonitorFloatingWindow.this.f6415h) {
+                        PerformanceMonitorFloatingWindow pmfw =
+                            PerformanceMonitorFloatingWindow.this;
+                        pmfw.X(String.valueOf(pmfw.j0));
+                        GameDurationManager.n().p(pmfw.mCurPkg, pmfw);
+                    }
+                }
+            });
+        }
+        @Override
+        public void onDisplayChanged(int i2) { super.onDisplayChanged(i2); }
+        @Override
+        public void onDisplayRemoved(int i2) { super.onDisplayRemoved(i2); }
+    };
+
+    // ═══════ Touch listener ═══════
+    private View.OnTouchListener s0 = new View.OnTouchListener() {
+        @Override
+        public boolean onTouch(View view, MotionEvent motionEvent) {
+            PerformanceMonitorFloatingWindow.this.C(motionEvent);
+            return true;
+        }
+    };
+
+    // ═══════ Auto-fade runnable (50% alpha after 5s) ═══════
+    private Runnable u0 = new Runnable() {
+        @Override
+        public void run() {
+            if (!PerformanceMonitorFloatingWindow.this.f6415h
+                || PerformanceMonitorFloatingWindow.this.f6418k == null) {
+                return;
+            }
+            PerformanceMonitorFloatingWindow pmfw =
+                PerformanceMonitorFloatingWindow.this;
+            pmfw.R(pmfw.t0 ? 0.5f : 1.0f);
+        }
+    };
+
+    // ═══════ FPS Tick callback inner class ═══════
+    class AnonymousClass2 extends FpsTick {
+        AnonymousClass2() { }
+
+        private void lambda$onFps$0(int i2) {
+            PerformanceMonitorFloatingWindow.this.X(String.valueOf(i2));
+        }
+
+        private boolean shouldUpdateFps(String str) {
+            return PerformanceMonitorFloatingWindow.this.mCurPkg.equals(str)
+                || "com.zte.convert3d".equals(str)
+                || (SystemMgr.M(PerformanceMonitorFloatingWindow.this.mCurPkg)
+                    &amp;&amp; "com.tencent.mm".equals(str));
+        }
+
+        @Override
+        public void onFps(final int i2, float f2, String str, String str2) {
+            if (i2 == PerformanceMonitorFloatingWindow.this.j0
+                || !shouldUpdateFps(str)) {
+                return;
+            }
+            PerformanceMonitorFloatingWindow.this.K(new Runnable() {
+                public final void run() {
+                    AnonymousClass2.this.lambda$onFps$0(i2);
+                }
+            });
+            PerformanceMonitorFloatingWindow.this.j0 = i2;
+        }
+    }
+
+    // ═══════════════════════════════════════════
+    // CONSTRUCTOR
+    // ═══════════════════════════════════════════
+    public PerformanceMonitorFloatingWindow(
+            Context context, boolean isHost, boolean isFullScreen) {
+        this.f6417j = context;
+        this.l0 = isFullScreen;
+        this.k0 = SharedPreferencesUtil.k(context);
+        this.i0 = isHost;
+        this.w = new WindowManagerUtil(
+            (WindowManager) this.f6417j.getSystemService("window"));
+        this.J = context.getResources()
+            .getInteger(R.integer.performance_monitor_window_width);
+        this.K = context.getResources()
+            .getInteger(R.integer.performance_monitor_window_height);
+        this.P = context.getResources()
+            .getInteger(R.integer.special_electricity_view_width);
+        this.Q = context.getResources()
+            .getInteger(R.integer.special_current_time_view_width);
+        this.f6414c = context.getResources()
+            .getInteger(R.integer.performance_monitor_animation_translation_distance);
+        this.g0 = context.getResources().getConfiguration().orientation;
+        I();  // initView
+        if (FoldMgr.f()) {
+            GameAssistWindowManager.R.e(true, new MutableData.Observer() {
+                public final void a(Object obj) {
+                    PerformanceMonitorFloatingWindow.this
+                        .M(((Integer) obj).intValue());
+                }
+            });
+        }
+        if (isHost) {
+            context.getContentResolver().registerContentObserver(
+                Settings.Global.getUriFor("app_mirror_list"),
+                false, this.p0);
+        }
+    }
+
+    // ═══════ A() — Determine which panel was tapped ═══════
+    private int A(float f2) {
+        float f3 = this.L / this.I;  // panel width
+        if (f2 &lt; 1.0f * f3) return 0;      // time
+        if (f2 &lt; 2.0f * f3) return 1;      // FPS
+        if (f2 &lt; 3.0f * f3) return 2;      // net speed
+        return f2 &lt; f3 * 4.0f ? 3 : 4;    // battery : duration
+    }
+
+    // ═══════ B() — Build collapse/expand animation list ═══════
+    private List B(boolean expand) {
+        LinearLayout tappedPanel = (LinearLayout) this.H.get(this.V);
+        float x = tappedPanel.getX();
+        int width = tappedPanel.getWidth();
+        ArrayList arrayList = new ArrayList();
+
+        // Translation animations for non-tapped panels
+        for (int i2 = 0; i2 &lt; this.I; i2++) {
+            int idx = this.V;
+            if (i2 != idx) {
+                arrayList.add(i2 &lt; idx
+                    ? ObjectAnimator.ofFloat(this.H.get(i2),
+                        "translationX",
+                        expand ? -this.f6414c : 0.0f,
+                        expand ? 0.0f : -this.f6414c)
+                    : ObjectAnimator.ofFloat(this.H.get(i2),
+                        "translationX",
+                        expand ? this.f6414c : 0.0f,
+                        expand ? 0.0f : this.f6414c));
+            }
+        }
+
+        // Background pill width animator
+        float ratio = (float) width / this.L;
+        final float xRatio = x / (((this.L - x) - width) + x);
+        final float xOffset = (width * xRatio) + x;
+        ValueAnimator ofFloat = expand
+            ? ObjectAnimator.ofFloat(ratio, 1.0f)
+            : ObjectAnimator.ofFloat(1.0f, ratio);
+        ofFloat.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+            public void onAnimationUpdate(ValueAnimator va) {
+                float w = PerformanceMonitorFloatingWindow.this.L
+                    * ((Float) va.getAnimatedValue()).floatValue();
+                PerformanceMonitorFloatingWindow.this.f6421n
+                    .setRectanglePara(xOffset - (xRatio * w), w);
+            }
+        });
+        arrayList.add(ofFloat);
+        return arrayList;
+    }
+
+    // ═══════ C() — Touch event handler ═══════
+    private void C(MotionEvent motionEvent) {
+        if (this.f6416i) return;  // animation running
+        this.d0 = motionEvent.getRawX();
+        this.c0 = motionEvent.getRawY();
+        int action = motionEvent.getAction();
+
+        if (action == 0) {  // ACTION_DOWN
+            this.h0 = true;
+            y(false);  // cancel fade
+            this.b0 = motionEvent.getRawX();
+            this.a0 = motionEvent.getRawY();
+            this.Y = motionEvent.getX();
+            this.Z = motionEvent.getY();
+            this.L = this.U ? this.R : this.J;
+            return;
+        }
+        if (action != 1) {
+            if (action == 2) {  // ACTION_MOVE
+                if (!this.h0) return;
+                this.W = motionEvent.getRawX();
+                this.X = motionEvent.getRawY();
+                this.S = (int) (this.W - this.Y);
+                this.T = (int) (this.X - this.Z);
+                a0();  // checkAndUpdate
+                return;
+            }
+            if (action != 3) return;  // ACTION_CANCEL
+        }
+        // ACTION_UP or ACTION_CANCEL
+        this.h0 = false;
+        this.L = this.J;
+        if (Math.pow(this.d0 - this.b0, 2.0d)
+            + Math.pow(this.c0 - this.a0, 2.0d)
+            &lt; Math.pow(24.0d, 2.0d)) {
+            N(motionEvent.getX());  // tap → collapse/expand
+        } else {
+            P();  // drag → save position
+        }
+        this.W = motionEvent.getRawX();
+        this.X = motionEvent.getRawY();
+        this.Z = 0.0f;
+        this.Y = 0.0f;
+        y(true);  // restart fade timer
+    }
+
+    // ═══════ E() — Handle unsupported FPS apps ═══════
+    private void E(String str) {
+        if (J(str)) {
+            // Streaming app — show "--FPS"
+            if (this.y != null) this.y.setText(" --FPS");
+            if (this.D != null) this.D.setText(" --FPS");
+        } else {
+            // Normal game — show "00FPS" and register FPS callback
+            if (this.y != null) this.y.setText(" 00FPS");
+            if (this.D != null) this.D.setText(" 00FPS");
+            this.q0.register();
+        }
+    }
+
+    // ═══════ F() — Select active layout (open or shorten) ═══════
+    private void F() {
+        if (this.U) {
+            this.f6418k = this.f6423p;  // shorten
+            this.F.h();  // start battery monitoring
+            this.E.h();  // start net speed monitoring
+        } else {
+            this.f6418k = this.f6419l;  // open
+            this.z.h();  // start net speed monitoring
+            this.A.h();  // start battery monitoring
+        }
+        this.H.clear();
+        int childCount = this.f6420m.getChildCount();
+        for (int i2 = 0; i2 &lt; childCount; i2++) {
+            this.H.add((LinearLayout) this.f6420m.getChildAt(i2));
+        }
+        this.I = this.H.size();
+        this.f6418k.setOnTouchListener(this.s0);
+    }
+
+    // ═══════ G() — Initialize WindowManager.LayoutParams ═══════
+    private WindowManager.LayoutParams G() {
+        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
+            this.i0 ? 2027 : 2008,  // type
+            75826952,                 // flags
+            -3                        // format (TRANSLUCENT)
+        );
+        this.v = lp;
+        lp.flags = (lp.flags &amp; (-131073))
+            | WindowManagerWrapper.LayoutParams.PRIVATE_FLAG_COLOR_SPACE_AGNOSTIC;
+        StringBuilder sb = new StringBuilder();
+        sb.append("PerformanceMonitorFloatingWindow");
+        sb.append(this.i0 ? "Host" : "");
+        lp.setTitle(sb.toString());
+        WindowManagerWrapper.LayoutParams
+            .addHidePrivateTrustedOverlayFlags(this.v);
+        lp.gravity = 51;  // TOP | LEFT
+        lp.x = this.S;
+        lp.y = this.T;
+        lp.width = this.L;
+        lp.height = this.M;
+        if (this.U) {
+            lp.width = this.R;
+            this.L = this.R;
+        }
+        return this.v;
+    }
+
+    // ═══════ I() — Initialize all views ═══════
+    private void I() {
+        if (this.i0) {
+            // Host display — use LayoutInflater
+            HostDensityHelper.e(this.f6417j);
+            this.f6419l = (FrameLayout) LayoutInflater.from(this.f6417j)
+                .inflate(R.layout.performance_monitor_layout, null);
+            this.f6423p = (FrameLayout) LayoutInflater.from(this.f6417j)
+                .inflate(R.layout.layout_monitor_shorten, null);
+            this.f6424q = (LinearLayout) LayoutInflater.from(this.f6417j)
+                .inflate(R.layout.layout_monitor_current_time, null);
+            this.f6425r = (LinearLayout) LayoutInflater.from(this.f6417j)
+                .inflate(R.layout.layout_monitor_frame_rate, null);
+            this.f6426s = (LinearLayout) LayoutInflater.from(this.f6417j)
+                .inflate(R.layout.layout_monitor_net_speed, null);
+            this.t = (LinearLayout) LayoutInflater.from(this.f6417j)
+                .inflate(R.layout.layout_monitor_electricity, null);
+            this.u = (LinearLayout) LayoutInflater.from(this.f6417j)
+                .inflate(R.layout.layout_monitor_game_duration, null);
+        } else {
+            // Game display — use InflaterHelper
+            this.f6419l = (FrameLayout)
+                InflaterHelper.f(R.layout.performance_monitor_layout, null);
+            this.f6423p = (FrameLayout)
+                InflaterHelper.f(R.layout.layout_monitor_shorten, null);
+            this.f6424q = (LinearLayout)
+                InflaterHelper.f(R.layout.layout_monitor_current_time, null);
+            this.f6425r = (LinearLayout)
+                InflaterHelper.f(R.layout.layout_monitor_frame_rate, null);
+            this.f6426s = (LinearLayout)
+                InflaterHelper.f(R.layout.layout_monitor_net_speed, null);
+            this.t = (LinearLayout)
+                InflaterHelper.f(R.layout.layout_monitor_electricity, null);
+            this.u = (LinearLayout)
+                InflaterHelper.f(R.layout.layout_monitor_game_duration, null);
+        }
+
+        // Bind views from open layout
+        this.f6420m = (LinearLayout)
+            this.f6419l.findViewById(R.id.performance_monitor_content);
+        this.f6421n = (CornerRectangle)
+            this.f6419l.findViewById(R.id.performance_monitor_background);
+        this.x = (TextClock)
+            this.f6419l.findViewById(R.id.performance_monitor_current_time);
+        this.y = (TextView)
+            this.f6419l.findViewById(R.id.frame_rate);
+        this.z = (PerformanceStatusView)
+            this.f6419l.findViewById(R.id.performance_monitor_net_speed);
+        this.A = (PerformanceStatusView)
+            this.f6419l.findViewById(R.id.performance_monitor_electricity);
+        this.B = (TextView)
+            this.f6419l.findViewById(R.id.performance_monitor_game_duration);
+
+        // Bind views from shorten layout and individual panels
+        this.f6422o = (CornerRectangle)
+            this.f6423p.findViewById(R.id.performance_monitor_background);
+        this.C = (TextClock)
+            this.f6424q.findViewById(R.id.performance_monitor_current_time);
+        this.D = (TextView)
+            this.f6425r.findViewById(R.id.frame_rate);
+        this.E = (PerformanceStatusView)
+            this.f6426s.findViewById(R.id.performance_monitor_net_speed);
+        this.F = (PerformanceStatusView)
+            this.t.findViewById(R.id.performance_monitor_electricity);
+        this.G = (TextView)
+            this.u.findViewById(R.id.performance_monitor_game_duration);
+
+        T();   // setTextDefaultFont on all views
+        b0();  // locale-specific width adjustments
+    }
+
+    // ═══════ J() — Check if app is in unsupported FPS list ═══════
+    private boolean J(String str) {
+        if (TextUtils.isEmpty(str)) return false;
+        return v0.contains(str);
+    }
+
+    // ═══════ N() — Handle tap: collapse or expand ═══════
+    private void N(float f2) {
+        int A = A(f2);  // which panel was tapped
+        if (this.U) {
+            // Currently collapsed → expand
+            int x = (int) ((LinearLayout) this.H.get(this.V)).getX();
+            this.v.width = this.J;
+            this.U = false;
+            this.S = this.v.x - x;
+            Q(this.S);
+            v(false);  // switch to open layout
+            V(true);   // play expand animation
+            this.V = -1;
+        } else {
+            // Currently open → collapse to tapped panel
+            this.U = true;
+            LinearLayout panel = (LinearLayout) this.H.get(A);
+            this.v.width = panel.getWidth();
+            this.R = panel.getWidth();
+            int panelX = (int) panel.getX();
+            this.v.x = panelX + this.v.x;
+            this.V = A;
+            Q(this.v.x);
+            V(false);  // play collapse animation
+        }
+        y(true);  // restart fade timer
+    }
+
+    // ═══════ V() — Play collapse/expand animation ═══════
+    private void V(final boolean expand) {
+        AnimatorSet mainSet = new AnimatorSet();
+        mainSet.playTogether(B(expand));
+        if (expand) {
+            mainSet.setInterpolator(new AccelerateInterpolator());
+            mainSet.setDuration(100L);
+        } else {
+            mainSet.setInterpolator(new OvershootInterpolator(0.5f));
+            mainSet.setDuration(300L);
+        }
+        mainSet.addListener(new Animator.AnimatorListener() {
+            public void onAnimationCancel(Animator a) {
+                PerformanceMonitorFloatingWindow.this.f6416i = false;
+            }
+            public void onAnimationEnd(Animator a) {
+                if (!expand) {
+                    PerformanceMonitorFloatingWindow pmfw =
+                        PerformanceMonitorFloatingWindow.this;
+                    pmfw.f6422o.setRectanglePara(0.0f, pmfw.R);
+                    pmfw.v(true);  // add shorten window
+                }
+                PerformanceMonitorFloatingWindow.this.f6416i = false;
+            }
+            public void onAnimationRepeat(Animator a) {
+                PerformanceMonitorFloatingWindow.this.f6416i = false;
+            }
+            public void onAnimationStart(Animator a) {
+                PerformanceMonitorFloatingWindow.this.f6416i = true;
+            }
+        });
+
+        // Alpha animation set (fade in/out non-tapped panels)
+        AnimatorSet alphaSet = new AnimatorSet();
+        alphaSet.setInterpolator(new AccelerateInterpolator());
+        alphaSet.setDuration(expand ? 100L : 50L);
+        alphaSet.playTogether(z(expand));
+        alphaSet.start();
+        mainSet.start();
+    }
+
+    // ═══════ X() — Update FPS display ═══════
+    private void X(String str) {
+        if (this.f6415h) {
+            ViewGroup vg = this.f6418k;
+            if (vg == null || vg.getVisibility() != 0) return;
+            try {
+                if (this.D != null)
+                    this.D.setText(this.f6417j.getString(
+                        R.string.frame_rate_template, str));
+                if (this.y != null)
+                    this.y.setText(this.f6417j.getString(
+                        R.string.frame_rate_template, str));
+            } catch (Exception e2) {
+                GaLog.a("PerformanceMonitorFloatingWindow",
+                    "updateFps has exception e = " + e2);
+            }
+        }
+    }
+
+    // ═══════ v() — Switch between open/shorten window ═══════
+    private void v(boolean toShorten) {
+        this.f6418k.setOnTouchListener(null);
+        try {
+            // Remove all currently added views
+            Iterator it = this.n0.iterator();
+            while (it.hasNext()) {
+                this.w.b((View) it.next());
+            }
+            this.n0.clear();
+
+            if (toShorten) {
+                // Remove extra panels from shorten layout, add chosen one
+                FrameLayout fl = this.f6423p;
+                fl.removeViews(1, fl.getChildCount() - 1);
+                this.z.j();   // stop open net speed
+                this.A.j();   // stop open battery
+                int idx = this.V;
+                if (idx == 0) { this.C.refreshTime(); this.f6423p.addView(this.f6424q); }
+                else if (idx == 1) { this.f6423p.addView(this.f6425r); }
+                else if (idx == 2) { O(this.E, this.z); this.f6423p.addView(this.f6426s); }
+                else if (idx == 3) { O(this.F, this.A); this.f6423p.addView(this.t); }
+                else if (idx == 4) { this.f6423p.addView(this.u); }
+                this.E.i();  // start shorten net speed
+                this.F.i();  // start shorten battery
+                this.f6418k = this.f6423p;
+            } else {
+                // Switch back to open layout
+                this.E.j();  // stop shorten net speed
+                this.F.j();  // stop shorten battery
+                O(this.z, this.E);   // copy net speed data back
+                O(this.A, this.F);   // copy battery data back
+                this.z.i();  // start open net speed
+                this.A.i();  // start open battery
+                this.x.refreshTime();
+                this.f6418k = this.f6419l;
+                w();  // checkLayoutParams
+            }
+            this.f6418k.setOnTouchListener(this.s0);
+            this.w.a(this.f6418k, this.v);
+            this.n0.add(this.f6418k);
+        } catch (Exception e2) {
+            GaLog.c("PerformanceMonitorFloatingWindow",
+                "addOpenOrShortenWindow exception!", e2);
+        }
+    }
+
+    // ═══════ y() — Manage auto-fade timer ═══════
+    private void y(boolean fade) {
+        this.t0 = fade;
+        this.o0.removeCallbacks(this.u0);
+        this.o0.postDelayed(this.u0, this.t0 ? 5000L : 0L);
+    }
+
+    // ═══════ addFloatView() — Main entry point ═══════
+    public void addFloatView(String str) {
+        this.mCurPkg = str;
+        if (this.f6415h) return;
+        H();  // initDimensions
+        F();  // selectLayout
+        G();  // initLayoutParams
+        Y();  // restorePosition
+        if (!this.f6415h) {
+            w();  // checkLayoutParams (clamp to screen)
+            if (this.U) {
+                this.f6422o.setRectanglePara(0.0f, this.R);
+                v(true);
+            }
+            this.f6418k.setVisibility(View.VISIBLE);
+            this.f6418k.setId(R.id.performance_monitor_root);
+            this.w.a(this.f6418k, this.v);
+            this.n0.add(this.f6418k);
+            this.f6415h = true;
+            E(this.mCurPkg);  // handle FPS for this package
+            if (this.x != null) this.x.refreshTime();
+            if (this.C != null) this.C.refreshTime();
+            DisplayMgr.d().a(this.r0);  // register display callback
+        }
+        y(true);  // start fade timer
+    }
+
+    // ═══════ removeFloatView() — Cleanup ═══════
+    public void removeFloatView() {
+        this.mCurPkg = "";
+        this.z.j();   // stop open net speed
+        this.A.j();   // stop open battery
+        this.E.j();   // stop shorten net speed
+        this.F.j();   // stop shorten battery
+        if (this.f6415h) {
+            this.q0.unRegister();   // detach FPS callback
+            this.j0 = 0;
+            DisplayMgr.d().f(this.r0);  // unregister display callback
+            if (this.o0 != null) this.o0.removeCallbacks(this.u0);
+            if (this.f6418k == null || this.w == null) return;
+            this.f6418k.setVisibility(View.GONE);
+            try {
+                Iterator it = this.n0.iterator();
+                while (it.hasNext()) {
+                    this.w.b((View) it.next());
+                }
+                this.n0.clear();
+                this.f6415h = false;
+            } catch (Exception e2) {
+                GaLog.b("PerformanceMonitorFloatingWindow",
+                    "removeFloatView: " + e2.toString());
+            }
+        }
+    }
+
+    // ═══════ onBundlePrepare() — Game duration callback ═══════
+    @Override
+    public void onBundlePrepare(Bundle bundle) {
+        if (bundle == null) return;
+        long time = bundle.getLong("time");
+        String msToH = UseTimeUtils.msToH(time);
+        updateGameDuration(msToH);
+        MultiSubScreenUtils.x(time);
+    }
+
+    // ═══════ b0() — Locale-specific width adjustments ═══════
+    private void b0() {
+        String language = Locale.getDefault().getLanguage();
+        if (language.equals("vi")) {
+            // Vietnamese: wider battery text
+            U(this.A, this.P);
+            U(this.F, this.P);
+        } else if (language.equals("th")) {
+            // Thai: wider time text
+            U(this.x, this.Q);
+            U(this.C, this.Q);
+        }
+    }
+
+    // ═══════ w() — Clamp position to screen bounds ═══════
+    private void w() {
+        boolean isHorizontal = this.g0 == 2;
+        boolean hasNavBar = Settings.Global.getInt(
+            this.f6417j.getContentResolver(), "cc_navi_status", 0) == 1;
+        int screenW = this.i0 ? this.N : GameAssistWindowManager.Q;
+        int screenH = this.i0 ? this.O : GameAssistWindowManager.P;
+        if (!isHorizontal &amp;&amp; hasNavBar) screenH -= 120;
+        this.S = Math.max(this.S, 0);
+        this.S = Math.min(this.S, screenW - this.L);
+        int margin = this.i0 ? this.f0 : this.e0;
+        this.T = Math.max(this.T, margin);
+        this.T = Math.min(this.T, (screenH - this.M) - margin);
+        if (this.v != null &amp;&amp; this.S >= 0 &amp;&amp; this.T >= 0) {
+            this.v.x = this.S;
+            this.v.y = this.T;
+        }
+    }
+
+    // (Additional utility methods: setTextDefaultFont, onOrientationChanged,
+    //  onLanguageChanged, updateFullScreen, updateHostScreenSize,
+    //  dump, etc. — see full decompiled source)
+}</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Source: Controller -->
+  <div class="section" id="source-ctrl">
+    <h2>PerformanceMonitorController.java</h2>
+    <div class="code-section">
+      <div class="code-header" onclick="toggleCode(this)">
+        <span class="file-name">PerformanceMonitorController.java</span>
+        <span class="file-meta"><span class="tag cyan">411 LINES</span> <span class="toggle-icon">▼</span></span>
+      </div>
+      <div class="code-body collapsed" style="max-height:none;">
+        <pre>package cn.nubia.gameassist.dessert.policy.performancemonitor;
+
+import android.content.Context;
+import android.content.res.Configuration;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
+import android.provider.Settings;
+import com.zte.gameassist.common.GameMonitor;
+import com.zte.gameassist.common.SystemMgr;
+import com.zte.gameassist.common.ThreadManager;
+import com.zte.gameassist.utils.GaLog;
+import com.zte.gameassist.utils.NubiaTrackManager;
+import com.zte.gameassist.utils.SharedPreferencesUtil;
+import cn.nubia.hostassist.HostMonitor;
+import java.util.Locale;
+
+public class PerformanceMonitorController
+        implements GameMonitor.Callback, HostMonitor.Callback {
+
+    private static volatile PerformanceMonitorController f6396s;
+    private Context f6397c;
+    private Handler f6399i;
+    private boolean f6400j;              // mIsGameStopped
+    private String f6401k = "";          // last language
+    private int f6402l;                  // mOrientation
+    private int f6403m;                  // mHostOrientation
+    public long mTrackBeginTime;
+    private boolean f6404n;              // mIsFullActivityFirstCreate
+    private PerformanceMonitorWindowController f6405o;  // game window
+    private PerformanceMonitorWindowController f6406p;  // host window
+    private boolean f6407q;              // mIsFullScreen
+
+    // Delayed add runnable (800-1100ms after game start)
+    private Runnable f6408r = new Runnable() {
+        @Override
+        public void run() {
+            if (PerformanceMonitorController.this.f6405o != null) {
+                GaLog.a("PerformanceMonitorController",
+                    "onGameStart: isWindowAdd = "
+                    + f6405o.getWindow().isWindowAdd());
+            }
+            if (isPerformanceMonitorSwitchOpened()) {
+                register(false);
+            }
+        }
+    };
+
+    // ═══════ CONSTRUCTOR ═══════
+    private PerformanceMonitorController(Context context) {
+        this.f6397c = context;
+        // Migrate old FPS display setting
+        if (Settings.Global.getInt(
+                context.getContentResolver(), "framerate_display", 0) == 1) {
+            Settings.Global.putInt(
+                context.getContentResolver(), "framerate_display", 0);
+        }
+        // Migrate Settings.Global → SharedPreferences
+        int value = Settings.Global.getInt(
+            context.getContentResolver(), "performance_monitor", 0);
+        if (value == 1) {
+            SharedPreferencesUtil.k(context)
+                .U("spf_performance_monitor", value);
+        }
+        this.f6399i = new Handler(ThreadManager.c().e());
+        SystemMgr.y(context).h(this);  // register GameMonitor
+        SystemMgr.y(context).o(this);  // register HostMonitor
+    }
+
+    // ═══════ SINGLETON ═══════
+    public static PerformanceMonitorController getInstance(Context ctx) {
+        if (f6396s == null) {
+            synchronized (PerformanceMonitorController.class) {
+                if (f6396s == null) {
+                    f6396s = new PerformanceMonitorController(ctx);
+                }
+            }
+        }
+        return f6396s;
+    }
+
+    // ═══════ SWITCH CHECK ═══════
+    public boolean isPerformanceMonitorSwitchOpened() {
+        return SharedPreferencesUtil.k(this.f6397c)
+            .l("spf_performance_monitor", 0) > 0;
+    }
+
+    // ═══════ GAME LIFECYCLE ═══════
+    @Override  // GameMonitor.Callback
+    public void y() {  // onGameStart
+        if (isPerformanceMonitorSwitchOpened()) {
+            if (this.f6405o == null) {
+                this.f6405o = new PerformanceMonitorWindowController(
+                    this.f6397c, this.f6407q);
+            }
+            this.f6400j = false;
+            this.f6399i.removeCallbacks(this.f6408r);
+            // Delay: 1100ms for first activity, 800ms otherwise
+            this.f6399i.postDelayed(this.f6408r,
+                this.f6404n ? 1100L : 800L);
+        }
+    }
+
+    @Override  // GameMonitor.Callback
+    public void z() {  // onGameStop
+        if (!isPerformanceMonitorSwitchOpened()) {
+            this.f6405o = null;
+            return;
+        }
+        this.f6400j = true;
+        this.f6404n = false;
+        this.f6399i.removeCallbacks(this.f6408r);
+        unregister(false);
+    }
+
+    @Override  // GameMonitor.Callback
+    public void A() {  // onGameUpdate
+        if (isPerformanceMonitorSwitchOpened() &amp;&amp; this.f6405o != null) {
+            this.f6405o.updateCurrPkg(SystemMgr.t());
+        }
+    }
+
+    // ═══════ REGISTER / UNREGISTER ═══════
+    public void register(final boolean fromUser) {
+        h(new Runnable() {
+            public void run() {
+                if (f6405o == null) {
+                    f6405o = new PerformanceMonitorWindowController(
+                        f6397c, f6407q);
+                }
+                if (f6405o.getWindow().isWindowAdd()) return;
+                g();  // addFloatView
+                if (fromUser) {
+                    mTrackBeginTime = SystemClock.uptimeMillis();
+                }
+            }
+        });
+    }
+
+    public void unregister(final boolean fromUser) {
+        h(new Runnable() {
+            public void run() {
+                if (f6405o != null &amp;&amp; f6405o.getWindow().isWindowAdd()) {
+                    f6405o.removeFloatView();
+                }
+                if (fromUser) m();  // trackUsage
+            }
+        });
+    }
+
+    // ═══════ STATUS BAR EVENTS ═══════
+    public void executive(String str, ...) {
+        if ("statusbar_show".equals(str)) {
+            this.f6407q = false;
+            n();  // updateFullScreen
+        } else if ("statusbar_hide".equals(str)) {
+            this.f6407q = true;
+            n();
+        }
+    }
+
+    // ═══════ ANALYTICS ═══════
+    private void m() {
+        Bundle bundle = new Bundle();
+        bundle.putString("app_name", SystemMgr.t());
+        if (f6405o == null
+            || !f6405o.getWindow().getIsViewGroupShorten()) {
+            bundle.putString("size", "all");
+        } else {
+            bundle.putString("size", "single");
+            bundle.putString("item", i());  // metric name
+        }
+        bundle.putString("duration", j());  // seconds active
+        NubiaTrackManager.p().x(
+            "cn.nubia.gamelauncher",
+            "performance_board_used", bundle);
+    }
+
+    // ═══════ ORIENTATION ═══════
+    public void onConfigurationChanged(Configuration config, boolean isHost) {
+        if (!isPerformanceMonitorSwitchOpened()) return;
+        // Language change detection
+        String lang = Locale.getDefault().getLanguage();
+        if (!this.f6401k.equals(lang) &amp;&amp; this.f6405o != null) {
+            this.f6405o.getWindow().onLanguageChanged(lang);
+            this.f6401k = lang;
+        }
+        // Orientation change
+        int orient = config.orientation;
+        if (isHost &amp;&amp; this.f6403m != orient) {
+            k();  // ensure host window
+            this.f6406p.getWindow().onOrientationChanged(orient);
+            this.f6403m = orient;
+        } else if (!isHost &amp;&amp; this.f6402l != orient) {
+            if (this.f6405o != null)
+                this.f6405o.getWindow().onOrientationChanged(orient);
+            this.f6402l = orient;
+        }
+    }
+}</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Source: PerformanceStatusView -->
+  <div class="section" id="source-status">
+    <h2>PerformanceStatusView.java</h2>
+    <div class="code-section">
+      <div class="code-header" onclick="toggleCode(this)">
+        <span class="file-name">PerformanceStatusView.java</span>
+        <span class="file-meta"><span class="tag amber">143 LINES</span> <span class="toggle-icon">▼</span></span>
+      </div>
+      <div class="code-body collapsed" style="max-height:none;">
+        <pre>package cn.nubia.gameassist.performance;
+
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.res.TypedArray;
+import android.net.TrafficStats;
+import android.os.BatteryManager;
+import android.os.Handler;
+import android.util.AttributeSet;
+import android.widget.TextView;
+import cn.nubia.gameassist.R;
+import com.zte.gameassist.common.ThreadManager;
+
+public class PerformanceStatusView extends TextView {
+
+    private boolean isBatteryLevelType;
+    private Handler mBackHandler;      // background thread
+    private BroadcastReceiver mBatteryChangeReceiver;
+    private Context mContext;
+    public long mLastByte;
+    public long mLastTime;
+    private Handler mMainHandler;      // main thread
+    private Runnable mRefreshRunnable;
+    private float mSpeed;
+
+    public PerformanceStatusView(Context ctx, AttributeSet attrs,
+                                  int defStyle, int defStyleRes) {
+        super(ctx, attrs, defStyle, defStyleRes);
+        this.mContext = ctx;
+        TypedArray ta = ctx.obtainStyledAttributes(
+            attrs, R.styleable.performanceView);
+        this.isBatteryLevelType = ta.getBoolean(
+            R.styleable.performanceView_isBatteryLevelType, false);
+        ta.recycle();
+        if (!this.isBatteryLevelType) {
+            this.mBackHandler = new Handler(ThreadManager.c().b());
+            this.mMainHandler = new Handler(ThreadManager.c().e());
+        }
+    }
+
+    // ═══════ Network speed formatting ═══════
+    private String c(float f2) {
+        if (Float.isInfinite(f2) || Float.isNaN(f2))
+            return "0.00 KB/S";
+        if (f2 &lt; 10240)           // &lt; 10 KB
+            return String.format("%.2f KB/S", f2 / 1024);
+        if (f2 &lt; 102400)          // &lt; 100 KB
+            return String.format("%.1f KB/S", f2 / 1024);
+        if (f2 &lt; 1024000)         // &lt; 1000 KB
+            return String.format("%.0f KB/S", f2 / 1024);
+        if (f2 &lt; 10485760)        // &lt; 10 MB
+            return String.format("%.2f MB/S", f2 / 1048576);
+        if (f2 &lt; 104857600)       // &lt; 100 MB
+            return String.format("%.1f MB/S", f2 / 1048576);
+        if (f2 &lt; 1048576000)      // &lt; 1000 MB
+            return String.format("%.0f MB/S", f2 / 1048576);
+        return String.format("%.2f GB/S", f2 / 1073741824);
+    }
+
+    // ═══════ Network speed monitor (background thread) ═══════
+    private void e() {
+        long currentTimeMillis = System.currentTimeMillis();
+        long totalBytes = TrafficStats.getTotalRxBytes()
+                        + TrafficStats.getTotalTxBytes();
+        this.mSpeed = (totalBytes - this.mLastByte)
+                    / ((currentTimeMillis - this.mLastTime) / 1000.0f);
+        if (totalBytes != this.mLastByte) {
+            this.mMainHandler.post(() -&gt; {
+                setText(mContext.getString(
+                    R.string.net_speed_template, c(mSpeed)));
+            });
+        }
+        // Re-post every 1 second
+        this.mBackHandler.postDelayed(this.mRefreshRunnable, 1000L);
+        this.mLastByte = totalBytes;
+        this.mLastTime = currentTimeMillis;
+    }
+
+    // ═══════ Start network monitoring ═══════
+    private void f() {
+        if (this.mRefreshRunnable == null) {
+            this.mRefreshRunnable = () -&gt; e();
+        }
+        this.mBackHandler.post(this.mRefreshRunnable);
+    }
+
+    // ═══════ Battery broadcast receiver ═══════
+    private void g() {
+        if (this.mBatteryChangeReceiver == null) {
+            this.mBatteryChangeReceiver = new BroadcastReceiver() {
+                @Override
+                public void onReceive(Context context, Intent intent) {
+                    if ("android.intent.action.BATTERY_CHANGED"
+                            .equals(intent.getAction())) {
+                        int level = (int) (
+                            (intent.getIntExtra("level", 0) * 100.0f)
+                            / intent.getIntExtra("scale", 100));
+                        setText(context.getString(
+                            R.string.battery_level_template, level));
+                    }
+                }
+            };
+        }
+        IntentFilter filter = new IntentFilter();
+        filter.addAction("android.intent.action.BATTERY_CHANGED");
+        this.mContext.registerReceiver(
+            this.mBatteryChangeReceiver, filter, 2);
+    }
+
+    // ═══════ h() — Start monitoring ═══════
+    public void h() {
+        if (!this.isBatteryLevelType) {
+            f();  // start network speed polling
+            return;
+        }
+        // Battery mode: read initial level
+        int batteryLevel = ((BatteryManager) getContext()
+            .getSystemService("batterymanager"))
+            .getIntProperty(4);  // BATTERY_PROPERTY_CAPACITY
+        setText(getContext().getString(
+            R.string.battery_level_template, batteryLevel));
+        g();  // register battery broadcast
+    }
+
+    // ═══════ i() — Re-start monitoring ═══════
+    public void i() {
+        if (this.isBatteryLevelType) g(); else f();
+    }
+
+    // ═══════ j() — Stop monitoring ═══════
+    public void j() {
+        if (this.mBatteryChangeReceiver != null) {
+            try {
+                this.mContext.unregisterReceiver(
+                    this.mBatteryChangeReceiver);
+            } catch (Exception e) { }
+            this.mBatteryChangeReceiver = null;
+        }
+        if (this.mBackHandler != null) {
+            this.mBackHandler.removeCallbacks(this.mRefreshRunnable);
+        }
+    }
+}</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Source: FpsTick -->
+  <div class="section" id="source-fps">
+    <h2>FpsTick.java</h2>
+    <div class="code-section">
+      <div class="code-header" onclick="toggleCode(this)">
+        <span class="file-name">FpsTick.java</span>
+        <span class="file-meta"><span class="tag green">36 LINES</span> <span class="toggle-icon">▼</span></span>
+      </div>
+      <div class="code-body collapsed" style="max-height:none;">
+        <pre>package cn.nubia.gameassist.dessert.policy.performancemonitor.fpsTicker;
+
+import com.zte.performance.fpsTicker.FpsDetectManager;
+import com.zte.performance.fpsTicker.IFpsTickCallback;
+
+public class FpsTick extends IFpsTickCallback.Stub {
+    private FpsDetectManager mFpsDetectManager
+        = FpsDetectManager.getInstance();
+    private boolean mIsRegister;
+
+    public void onFps(int fps, float f2,
+                      String packageName, String surfaceName) {
+        // Override in anonymous subclass
+    }
+
+    public void onServiceDestroy() {
+    }
+
+    public boolean register() {
+        FpsDetectManager mgr = this.mFpsDetectManager;
+        if (mgr == null || this.mIsRegister) {
+            return false;
+        }
+        mgr.registerCallback(this);
+        this.mIsRegister = true;
+        return true;
+    }
+
+    public void unRegister() {
+        if (!this.mIsRegister
+            || this.mFpsDetectManager == null) {
+            return;
+        }
+        this.mIsRegister = false;
+        this.mFpsDetectManager.unRegisterCallback(this);
+    }
+}</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Source: CornerRectangle -->
+  <div class="section" id="source-corner">
+    <h2>CornerRectangle.java</h2>
+    <div class="code-section">
+      <div class="code-header" onclick="toggleCode(this)">
+        <span class="file-name">CornerRectangle.java</span>
+        <span class="file-meta"><span class="tag purple">94 LINES</span> <span class="toggle-icon">▼</span></span>
+      </div>
+      <div class="code-body collapsed" style="max-height:none;">
+        <pre>package cn.nubia.gameassist.dessert.policy.performancemonitor;
+
+import android.content.Context;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.RectF;
+import android.util.AttributeSet;
+import android.view.View;
+import cn.nubia.gameassist.R;
+
+public class CornerRectangle extends View {
+    private float mHeight;
+    private float mLeft;
+    private Paint mPaint;          // Fill paint
+    private float mRadius;
+    private final RectF mRoundRect;
+    private Paint mStrokePaint;    // Border paint
+    private final float mStrokeWidth;
+    private float mWidth;
+
+    public CornerRectangle(Context context, AttributeSet attrs,
+                           int defStyle, int defStyleRes) {
+        super(context, attrs, defStyle, defStyleRes);
+        this.mStrokeWidth = 2.0f;
+        this.mRoundRect = new RectF();
+        this.mRadius = 20.0f;
+        b();  // initPaint
+    }
+
+    // ═══════ Initialize paint objects ═══════
+    private void b() {
+        // Fill paint — dark navy-grey
+        Paint paint = new Paint();
+        this.mPaint = paint;
+        paint.setAntiAlias(true);
+        this.mPaint.setStyle(Paint.Style.FILL);
+        this.mPaint.setColor(Color.parseColor("#FF222635"));
+
+        // Stroke paint — subtle grey border
+        Paint stroke = new Paint();
+        this.mStrokePaint = stroke;
+        stroke.setColor(Color.parseColor("#FF545353"));
+        this.mStrokePaint.setAntiAlias(true);
+        this.mStrokePaint.setStrokeWidth(2.0f);
+        this.mStrokePaint.setStyle(Paint.Style.STROKE);
+
+        this.mWidth = getResources().getInteger(
+            R.integer.performance_monitor_window_width);
+        this.mHeight = getResources().getInteger(
+            R.integer.performance_monitor_window_height);
+        this.mLeft = 0.0f;
+        c();  // updateRect
+    }
+
+    // ═══════ Update RectF bounds ═══════
+    private void c() {
+        float left = this.mLeft;
+        this.mRoundRect.set(
+            left + 1.0f,           // inset 1px for stroke
+            1.0f,
+            (left + this.mWidth) - 1.0f,
+            this.mHeight - 1.0f
+        );
+    }
+
+    // ═══════ Draw rounded rectangle ═══════
+    protected void a(Canvas canvas, Paint paint) {
+        RectF rectF = this.mRoundRect;
+        float r = this.mRadius;
+        canvas.drawRoundRect(rectF, r, r, paint);
+    }
+
+    public float getBgWidth() {
+        return this.mWidth;
+    }
+
+    @Override
+    protected void onDraw(Canvas canvas) {
+        super.onDraw(canvas);
+        a(canvas, this.mPaint);        // draw fill
+        a(canvas, this.mStrokePaint);  // draw border
+    }
+
+    // ═══════ Animate pill dimensions ═══════
+    public void setRectanglePara(float left, float width) {
+        setRectanglePara(left, width, this.mRadius);
+    }
+
+    public void setRectanglePara(float left, float width, float radius) {
+        this.mLeft = left;
+        this.mWidth = width;
+        this.mRadius = radius;
+        c();          // update RectF
+        invalidate(); // trigger redraw
+    }
+}</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Source: Layout XMLs -->
+  <div class="section" id="source-layout">
+    <h2>Layout XML Files</h2>
+
+    <div class="code-section">
+      <div class="code-header" onclick="toggleCode(this)">
+        <span class="file-name">performance_monitor_layout.xml</span>
+        <span class="file-meta"><span class="tag cyan">FULL BAR</span> <span class="toggle-icon">▼</span></span>
+      </div>
+      <div class="code-body collapsed" style="max-height:none;">
+        <pre>&lt;FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"&gt;
+
+    &lt;!-- Pill-shaped background --&gt;
+    &lt;cn.nubia...CornerRectangle
+        android:id="@+id/performance_monitor_background"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"/&gt;
+
+    &lt;!-- Horizontal layout of 5 metric panels --&gt;
+    &lt;cn.nubia...PerformanceMonitorLayout
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:id="@+id/performance_monitor_content"
+        android:paddingLeft="@dimen/performance_monitor_content_padding_left"
+        android:paddingRight="@dimen/performance_monitor_content_padding_right"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"&gt;
+
+        &lt;include layout="@layout/layout_monitor_current_time"
+            style="@style/performance_monitor_content_item_style"/&gt;
+        &lt;include layout="@layout/layout_monitor_frame_rate"
+            style="@style/performance_monitor_content_item_style"/&gt;
+        &lt;include layout="@layout/layout_monitor_net_speed"
+            style="@style/performance_monitor_content_item_style"/&gt;
+        &lt;include layout="@layout/layout_monitor_electricity"
+            style="@style/performance_monitor_content_item_style"/&gt;
+        &lt;include layout="@layout/layout_monitor_game_duration"
+            style="@style/performance_monitor_content_item_style"/&gt;
+
+    &lt;/cn.nubia...PerformanceMonitorLayout&gt;
+&lt;/FrameLayout&gt;</pre>
+      </div>
+    </div>
+
+    <div class="code-section">
+      <div class="code-header" onclick="toggleCode(this)">
+        <span class="file-name">layout_monitor_shorten.xml</span>
+        <span class="file-meta"><span class="tag amber">COLLAPSED</span> <span class="toggle-icon">▼</span></span>
+      </div>
+      <div class="code-body collapsed" style="max-height:none;">
+        <pre>&lt;FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="horizontal"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"&gt;
+
+    &lt;!-- Background only — single panel added dynamically --&gt;
+    &lt;cn.nubia...CornerRectangle
+        android:id="@+id/performance_monitor_background"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"/&gt;
+
+&lt;/FrameLayout&gt;</pre>
+      </div>
+    </div>
+
+    <div class="code-section">
+      <div class="code-header" onclick="toggleCode(this)">
+        <span class="file-name">Individual Panel Layouts</span>
+        <span class="file-meta"><span class="tag green">5 FILES</span> <span class="toggle-icon">▼</span></span>
+      </div>
+      <div class="code-body collapsed" style="max-height:none;">
+        <pre>&lt;!-- layout_monitor_current_time.xml --&gt;
+&lt;LinearLayout android:gravity="center"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"&gt;
+    &lt;ImageView android:src="@drawable/performance_monitor_time"/&gt;
+    &lt;cn.nubia...PerformanceMonitorClock
+        android:textSize="@dimen/performance_monitor_content_item_text_size"
+        android:textColor="#ffd7d7d7"
+        android:id="@+id/performance_monitor_current_time"
+        android:layout_width="@dimen/performance_monitor_current_time_width"/&gt;
+&lt;/LinearLayout&gt;
+
+&lt;!-- layout_monitor_frame_rate.xml --&gt;
+&lt;LinearLayout android:gravity="center" ...&gt;
+    &lt;ImageView android:src="@drawable/performance_monitor_framerate"/&gt;
+    &lt;TextView
+        android:textColor="#ffd7d7d7"
+        android:id="@+id/frame_rate"
+        android:layout_width="@dimen/performance_monitor_frame_rate_width"
+        android:text=" 00FPS"/&gt;
+&lt;/LinearLayout&gt;
+
+&lt;!-- layout_monitor_net_speed.xml --&gt;
+&lt;LinearLayout android:gravity="center" ...&gt;
+    &lt;ImageView android:src="@drawable/performance_monitor_netspeed"/&gt;
+    &lt;cn.nubia...PerformanceStatusView
+        android:textColor="#ffd7d7d7"
+        android:id="@+id/performance_monitor_net_speed"
+        app:isBatteryLevelType="false"/&gt;     &lt;!-- ← Network mode --&gt;
+&lt;/LinearLayout&gt;
+
+&lt;!-- layout_monitor_electricity.xml --&gt;
+&lt;LinearLayout android:gravity="center" ...&gt;
+    &lt;ImageView android:src="@drawable/performance_monitor_electricity"/&gt;
+    &lt;cn.nubia...PerformanceStatusView
+        android:textColor="#ffd7d7d7"
+        android:id="@+id/performance_monitor_electricity"
+        app:isBatteryLevelType="true"/&gt;      &lt;!-- ← Battery mode --&gt;
+&lt;/LinearLayout&gt;
+
+&lt;!-- layout_monitor_game_duration.xml --&gt;
+&lt;LinearLayout android:gravity="center" ...&gt;
+    &lt;ImageView android:src="@drawable/performance_monitor_game_duration"/&gt;
+    &lt;TextView
+        android:textColor="#ffd7d7d7"
+        android:id="@+id/performance_monitor_game_duration"
+        android:minWidth="@dimen/performance_monitor_game_duration_min_width"
+        android:text=" 0.0h"/&gt;
+&lt;/LinearLayout&gt;</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Source: Support Classes -->
+  <div class="section" id="source-support">
+    <h2>Support Classes</h2>
+
+    <div class="code-section">
+      <div class="code-header" onclick="toggleCode(this)">
+        <span class="file-name">PerformanceMonitorWindowController.java</span>
+        <span class="file-meta"><span class="tag cyan">136 LINES</span> <span class="toggle-icon">▼</span></span>
+      </div>
+      <div class="code-body collapsed" style="max-height:none;">
+        <pre>package cn.nubia.gameassist.dessert.policy.performancemonitor;
+
+import android.content.Context;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import cn.nubia.gameassist.common.GameDurationManager;
+import cn.nubia.gameassist.dessert.policy.performancemonitor.present.UseTimeUtils;
+
+public class PerformanceMonitorWindowController
+        implements GameDurationManager.CallBack {
+
+    public PerformanceMonitorFloatingWindow mPerformanceMonitorWindow;
+    public Runnable mTimeChangeRunnable;
+    public String mCurPkg = "";
+    private Handler f6440c = new Handler(Looper.getMainLooper());
+    private int f6442i = 0;  // retry count
+
+    // Delayed removal runnable (100ms)
+    private Runnable f6443j = new Runnable() {
+        public void run() {
+            if (mPerformanceMonitorWindow.isWindowAdd()) {
+                mPerformanceMonitorWindow.removeFloatView();
+                f6442i = 0;
+            }
+        }
+    };
+
+    public PerformanceMonitorWindowController(Context ctx, boolean fullScreen) {
+        this.mPerformanceMonitorWindow =
+            new PerformanceMonitorFloatingWindow(ctx, false, fullScreen);
+    }
+
+    // ═══════ Duration timer tick (every 60s) ═══════
+    private void d() {
+        GameDurationManager.n().p(this.mCurPkg, this);
+        this.f6440c.postDelayed(this.mTimeChangeRunnable, 60000L);
+    }
+
+    // ═══════ Update duration display ═══════
+    private void e(long time) {
+        String msToH = UseTimeUtils.msToH(time);
+        this.mPerformanceMonitorWindow.updateGameDuration(msToH);
+    }
+
+    // ═══════ Start duration timer ═══════
+    private void f() {
+        if (this.mTimeChangeRunnable == null) {
+            this.mTimeChangeRunnable = () -&gt; d();
+        }
+        this.f6440c.post(this.mTimeChangeRunnable);
+    }
+
+    public void addFloatView(String str) {
+        if (this.mPerformanceMonitorWindow.isWindowAdd()) return;
+        this.mCurPkg = str;
+        this.f6440c.removeCallbacks(this.f6443j);
+        this.mPerformanceMonitorWindow.addFloatView(str);
+        f();  // start duration timer
+        GameDurationManager.n().p(this.mCurPkg, this);
+    }
+
+    public void removeFloatView() {
+        this.f6440c.removeCallbacks(this.mTimeChangeRunnable);
+        this.f6440c.postDelayed(this.f6443j, 100L);
+    }
+
+    // ═══════ GameDurationManager callback ═══════
+    @Override
+    public void onBundlePrepare(Bundle bundle) {
+        if (bundle != null) {
+            long time = bundle.getLong("time");
+            e(time);
+        } else if (this.f6442i &lt; 3) {
+            // Retry up to 3 times with 3s delay
+            this.f6440c.postDelayed(this.mTimeChangeRunnable, 3000L);
+            this.f6442i++;
+        }
+    }
+
+    public PerformanceMonitorFloatingWindow getWindow() {
+        return this.mPerformanceMonitorWindow;
+    }
+}</pre>
+      </div>
+    </div>
+
+    <div class="code-section">
+      <div class="code-header" onclick="toggleCode(this)">
+        <span class="file-name">PerformanceMonitorTile.java + TileProxy</span>
+        <span class="file-meta"><span class="tag purple">161 LINES</span> <span class="toggle-icon">▼</span></span>
+      </div>
+      <div class="code-body collapsed" style="max-height:none;">
+        <pre>// ═══════ PerformanceMonitorTile.java (70 lines) ═══════
+package cn.nubia.gameassist.dessert.tiles;
+
+public class PerformanceMonitorTile extends QSTile
+        implements IModuleProxy.ICallback&lt;IPerformanceMonitorProxy&gt; {
+
+    private final PerformanceMonitorTileProxy v;
+
+    public PerformanceMonitorTile(QSTile.Host host) {
+        super(host);
+        PerformanceMonitorTileProxy proxy =
+            (PerformanceMonitorTileProxy) host.a(
+                IPerformanceMonitorProxy.class);
+        this.v = proxy;
+        proxy.l(host);
+    }
+
+    @Override
+    protected boolean S() {  // handleClick
+        return this.v.d();
+    }
+
+    @Override
+    protected void c0(QSTile.State state, Object obj) {
+        super.c0(state, obj);
+        if (this.f6162r &amp;&amp; this.v.c()) {
+            state.f6168b = QSTile.ResourceIcon.b(
+                R.drawable.game_ic_performance_monitor_switch_on);
+            state.f6175i = true;
+        } else {
+            state.f6168b = QSTile.ResourceIcon.b(
+                R.drawable.game_ic_performance_monitor_switch_off);
+            state.f6175i = false;
+        }
+        state.f6169c = this.f6153i.getString(
+            R.string.ic_qs_performance_monitor);
+    }
+
+    // AI agent commands
+    @Override
+    protected void k0(String str, String str2,
+            IGameAssistClientCallback cb, InMsg inMsg) {
+        if ("game_turn_on_performance_monitor".equals(str)) {
+            this.v.a(true);
+            GameAgentUtil.e(this.f6153i, cb, inMsg,
+                R.string.ic_qs_performance_monitor);
+        } else if ("game_turn_off_performance_monitor".equals(str)) {
+            this.v.a(false);
+            GameAgentUtil.d(this.f6153i, cb, inMsg,
+                R.string.ic_qs_performance_monitor);
+        }
+    }
+}
+
+// ═══════ PerformanceMonitorTileProxy.java (91 lines) ═══════
+package cn.nubia.gameassist.dessert.policy;
+
+public class PerformanceMonitorTileProxy extends AbsTileProxy
+        implements IPerformanceMonitorProxy, GameMonitor.Callback,
+                   SharedPreferences.OnSharedPreferenceChangeListener {
+
+    private Context f6297l;
+    private QSTile.Host f6298m;
+
+    public PerformanceMonitorTileProxy(ModuleProxyContext mpc) {
+        super(mpc);
+        this.f6297l = mpc.a();
+    }
+
+    // ═══════ Toggle logic ═══════
+    public void m(int currentValue) {
+        if (!SystemMgr.H()) {
+            // Not in a game scene
+            ToastUtil.a(context.getString(
+                R.string.toast_unsupport_app));
+            return;
+        }
+        if (!Utils.c(context)) {
+            // No overlay permission
+            return;
+        }
+        if (currentValue == 1) {
+            // Currently ON → turn OFF
+            SharedPreferencesUtil.k(context)
+                .U("spf_performance_monitor", 0);
+            PerformanceMonitorController.getInstance(context)
+                .unregister(true);
+        } else {
+            // Currently OFF → turn ON
+            this.f6298m.b();  // dismiss sidebar
+            SharedPreferencesUtil.k(context)
+                .U("spf_performance_monitor", 1);
+            PerformanceMonitorController.getInstance(context)
+                .register(true);
+        }
+    }
+}</pre>
+      </div>
+    </div>
+
+    <div class="code-section">
+      <div class="code-header" onclick="toggleCode(this)">
+        <span class="file-name">UseTimeUtils.java + PerformanceMonitorClock.java + PerformanceMonitorLayout.java</span>
+        <span class="file-meta"><span class="tag red">138 LINES</span> <span class="toggle-icon">▼</span></span>
+      </div>
+      <div class="code-body collapsed" style="max-height:none;">
+        <pre>// ═══════ UseTimeUtils.java (52 lines) ═══════
+package cn.nubia.gameassist.dessert.policy.performancemonitor.present;
+
+import java.text.DecimalFormat;
+
+public class UseTimeUtils {
+
+    // Convert milliseconds to decimal hours string
+    public static String msToH(long ms) {
+        double hours = msToMinite(ms) / 60.0d;
+        return new DecimalFormat(
+            hours >= 0.1d ? "0.0" : "0.00"
+        ).format(hours);
+    }
+
+    // Convert milliseconds to [hours, minutes] array
+    public static long[] msToHm(long ms) {
+        int minutes = msToMinite(ms);
+        return new long[]{ minutes / 60, minutes % 60 };
+    }
+
+    // Convert milliseconds to integer minutes
+    public static int msToMinite(long ms) {
+        return (int) (ms / 60000);
+    }
+
+    // Query game launcher for list of added games
+    public static List&lt;String&gt; getAppListOfGameLauncher(Context ctx) {
+        ArrayList list = new ArrayList();
+        try {
+            Cursor cursor = ctx.getContentResolver().query(
+                Uri.parse("content://cn.nubia.gamelauncher.db"
+                    + ".AppAddProvider/appadd?notify=false"),
+                null, null, null, null);
+            int colIdx = cursor.getColumnIndex("component");
+            cursor.moveToPosition(-1);
+            while (cursor.moveToNext()) {
+                String comp = cursor.getString(colIdx);
+                if (!TextUtils.isEmpty(comp)) {
+                    list.add(comp.substring(0, comp.indexOf(44)));
+                }
+            }
+            cursor.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return list;
+    }
+}
+
+// ═══════ PerformanceMonitorClock.java (42 lines) ═══════
+package cn.nubia.gameassist.dessert.policy.performancemonitor;
+
+import android.widget.TextClock;
+
+public class PerformanceMonitorClock extends TextClock {
+
+    // Force 24-hour display regardless of user locale
+    @Override
+    public boolean is24HourModeEnabled() {
+        return true;
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        try {
+            super.onDetachedFromWindow();
+        } catch (Exception e) {
+            // Prevent crash on removal
+            GaLog.b(TAG, "onDetachedFromWindow: " + e.toString());
+        }
+    }
+}
+
+// ═══════ PerformanceMonitorLayout.java (44 lines) ═══════
+package cn.nubia.gameassist.dessert.policy.performancemonitor;
+
+import android.widget.LinearLayout;
+
+public class PerformanceMonitorLayout extends LinearLayout {
+
+    private int mPerformanceMonitorChildLeftOffset;
+    private int mPerformanceMonitorChildRightOffset;
+
+    private void a(Context context) {
+        this.mPerformanceMonitorChildLeftOffset =
+            getResources().getInteger(
+                R.integer.performance_monitor_child_left_offset);
+        this.mPerformanceMonitorChildRightOffset =
+            getResources().getInteger(
+                R.integer.performance_monitor_child_right_offset);
+    }
+
+    @Override
+    protected void onLayout(boolean changed,
+            int l, int t, int r, int b) {
+        super.onLayout(changed, l, t, r, b);
+        // Shift each child: pull left edge in, push right edge out
+        for (int i = 0; i &lt; getChildCount(); i++) {
+            View child = getChildAt(i);
+            child.layout(
+                child.getLeft() - mPerformanceMonitorChildLeftOffset,
+                child.getTop(),
+                child.getRight() + mPerformanceMonitorChildRightOffset,
+                child.getBottom()
+            );
+        }
+    }
+}
+
+// ═══════ GameDurationManager.java ═══════
+// See architecture section — 416 lines, tracks per-game
+// session time via SystemClock.elapsedRealtime()
+// Key fields:
+//   f6129c: HashMap&lt;String, Long&gt; — accumulated play time per package
+//   f6133k: GameDuration[2] — display 0 (main) and display 1 (mirror)
+//   f6135m: GameDuration — most recently active game
+// Special handling for com.tencent.mm (WeChat mini-games)
+// Implements TopActivityMonitor.FullActivityResumedCallback</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <p>RedMagic 10 Pro (NX789J) · GameAssist Performance Monitor · Decompiled from system partition</p>
+    <p style="margin-top:8px;">Package: cn.nubia.gameassist · 12 source files · ~2700 total lines</p>
+  </div>
+</div>
+
+<script>
+function toggleCode(header) {
+  const body = header.nextElementSibling;
+  if (body && body.classList.contains('code-body')) {
+    body.classList.toggle('collapsed');
+    header.classList.toggle('collapsed');
+  }
+}
+</script>
