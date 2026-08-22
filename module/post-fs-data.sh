@@ -1,36 +1,43 @@
 #!/system/bin/sh
-# Game Space Unleashed v2.3.1 by MsysteM — Early Boot
+# Game Space Unleashed v3.0.0 by MsysteM — Early Boot
 # Runs BEFORE zygote starts. Uses resetprop to set/override ro.* properties.
-# system.prop handles NEW properties; resetprop handles OVERRIDING existing ones.
 
 MODDIR="${0%/*}"
+CONFDIR="/data/adb/game_space_unleashed"
 
 # ====================================================================
-# 1. Properties vendor DOESN'T set (empty) — need to exist before zygote
+# 1. GFRC — The key breakthrough: vendor.gpp.allgame.enable
 # ====================================================================
 
-# Super Resolution feature gate — vendor leaves EMPTY
-# Without this, Super Resolution plugin is hidden in all games
+# Read config — default is ALL games enabled
+GFRC_ALL_GAMES=1
+[ -f "$CONFDIR/config.sh" ] && . "$CONFDIR/config.sh"
+
+if [ "$GFRC_ALL_GAMES" = "1" ]; then
+    resetprop -n vendor.gpp.allgame.enable 1
+else
+    resetprop -n vendor.gpp.allgame.enable 0
+fi
+
+# Master GFRC enable
+resetprop -n vendor.gpp.frc.enable 0x22
+resetprop -n vendor.gpp.dynamic.settings.enable 1
+
+# ====================================================================
+# 2. Properties vendor DOESN'T set (empty) — need to exist before zygote
+# ====================================================================
+
 resetprop -n ro.vendor.feature.zte_feature_magic_super_resolution true
-
-# Shoulder key → launch GameSpace — vendor leaves EMPTY
 resetprop -n ro.vendor.feature.zte_feature_shoulder_key_launch_gamespace true
 
 # ====================================================================
-# 2. Properties vendor sets WRONG
+# 3. Properties vendor sets WRONG
 # ====================================================================
 
-# Game magic voice — vendor sets false
 resetprop -n ro.vendor.feature.zte_feature_game_magic_voice true
-
-# MFV window reply
 resetprop -n ro.vendor.feature.mfv_feature_windowreply true
 
 # ====================================================================
-# 3. Override gamespace_config — unlock ALL feature sections
-#    Vendor sets: 0:1,1:1,2:0,3:1,4:0,5:0,6:1,...,e:0,f:0,g:1
-#    Positions 2,4,5,e,f are DISABLED (0) — these gate feature sections
-#    like framerate control, image quality options, etc.
-#    Override ALL to 1 to unlock every feature section.
+# 4. Override gamespace_config — unlock ALL feature sections
 # ====================================================================
 resetprop -n ro.vendor.feature.zte_feature_gamespace_config "0:1,1:1,2:1,3:1,4:1,5:1,6:1,7:1,8:1,9:1,a:1,b:1,c:1,d:1,e:1,f:1,g:1"

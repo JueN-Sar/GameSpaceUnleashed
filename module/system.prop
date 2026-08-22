@@ -1,11 +1,28 @@
-# Game Space Unleashed v2.3.1 by MsysteM
+# Game Space Unleashed v3.0.0 by MsysteM
 # Properties the vendor DOESN'T set (or sets wrong).
 # The vendor already sets 100+ zte_feature_* props to true — don't duplicate those.
 
-# Super Resolution feature gate — vendor leaves this EMPTY
+# ====================================================================
+# GFRC — Qualcomm Game Performance Profiler (Super Resolution + Frame Interpolation)
+# ====================================================================
+
+# THE MAGIC PROPERTY — bypass gpp_app_list whitelist, ALL games get max SR + FI
+vendor.gpp.allgame.enable=1
+
+# Master GFRC enable
+persist.vendor.gfrc.enable=1
+
+# GFRC persistent state
+persist.magic.super.resolution=1
+
+# ====================================================================
+# Feature gates the vendor leaves EMPTY or sets wrong
+# ====================================================================
+
+# Super Resolution feature gate — vendor leaves EMPTY
 ro.vendor.feature.zte_feature_magic_super_resolution=true
 
-# Shoulder key → launch GameSpace — vendor leaves this EMPTY
+# Shoulder key → launch GameSpace — vendor leaves EMPTY
 ro.vendor.feature.zte_feature_shoulder_key_launch_gamespace=true
 
 # Game magic voice — vendor sets this false
@@ -13,7 +30,3 @@ ro.vendor.feature.zte_feature_game_magic_voice=true
 
 # Window reply — may not be in vendor defaults
 ro.vendor.feature.mfv_feature_windowreply=true
-
-# GFRC persistent properties
-persist.magic.super.resolution=1
-persist.vendor.gfrc.enable=1
