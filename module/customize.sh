@@ -1,5 +1,5 @@
 #!/system/bin/sh
-# Game Space Unleashed v3.0.1 by MsysteM — Installer
+# Game Space Unleashed v3.0.2 by MsysteM — Installer
 
 SKIPUNZIP=1
 

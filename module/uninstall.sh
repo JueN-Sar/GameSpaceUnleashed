@@ -1,5 +1,5 @@
 #!/system/bin/sh
-# Game Space Unleashed v3.0.0 by MsysteM — Uninstall
+# Game Space Unleashed v3.0.2 by MsysteM — Uninstall
 
 # Clean up diagnostic log
 rm -f /sdcard/GSU_diagnostic.log

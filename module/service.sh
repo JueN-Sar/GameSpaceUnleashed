@@ -1,5 +1,5 @@
 #!/system/bin/sh
-# Game Space Unleashed v3.0.1 by MsysteM — Boot Service
+# Game Space Unleashed v3.0.2 by MsysteM — Boot Service
 # Runs AFTER boot completes (sys.boot_completed=1).
 
 MODDIR="${0%/*}"
