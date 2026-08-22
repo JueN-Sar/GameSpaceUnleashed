@@ -4,9 +4,10 @@ on:
   push:
     branches:
       - main
-      - 'claude/*'
+      - 'claude/nubia-toolkit-*'
     paths-ignore:
       - '**.md'
+      - 'research/**'
   workflow_dispatch:
 
 jobs:
@@ -21,110 +22,40 @@ jobs:
 
       - name: Package Magisk module
         run: |
-          VERSION=$(grep 'version=' module/module.prop | cut -d'=' -f2)
+          mkdir -p build/module
 
-          mkdir -p build/module/META-INF/com/google/android
-
-          # Copy module files (NO APKs — property-only approach)
+          # Copy module files
           cp module/module.prop build/module/
           cp module/customize.sh build/module/
           cp module/service.sh build/module/
           cp module/post-fs-data.sh build/module/
-          cp module/system.prop build/module/
           cp module/uninstall.sh build/module/
-          cp module/META-INF/com/google/android/update-binary build/module/META-INF/com/google/android/
-          cp module/META-INF/com/google/android/updater-script build/module/META-INF/com/google/android/
+          cp module/system.prop build/module/
 
           # Create flashable zip
           cd build/module
+          VERSION=$(grep 'version=' module.prop | cut -d'=' -f2)
           zip -r "../../GameSpaceUnleashed-${VERSION}.zip" .
-
-          cd ../..
-          echo "=== Module contents ==="
-          unzip -l "GameSpaceUnleashed-${VERSION}.zip"
-          echo ""
-          echo "Module size: $(du -h GameSpaceUnleashed-${VERSION}.zip | cut -f1)"
-
-      - name: Get version
-        id: version
-        run: |
-          VERSION=$(grep 'version=' module/module.prop | cut -d'=' -f2)
-          VERSIONCODE=$(grep 'versionCode=' module/module.prop | cut -d'=' -f2)
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          echo "versionCode=${VERSIONCODE}" >> $GITHUB_OUTPUT
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: GameSpaceUnleashed-${{ steps.version.outputs.version }}
+          name: GameSpaceUnleashed
           path: GameSpaceUnleashed-*.zip
 
-      - name: Create/Update release
+      - name: Create release (on tag)
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.version.outputs.version }}
-          name: Game Space Unleashed ${{ steps.version.outputs.version }}
-          make_latest: true
           files: GameSpaceUnleashed-*.zip
           body: |
-            ## Game Space Unleashed ${{ steps.version.outputs.version }} by MsysteM
+            ## Game Space Unleashed ${{ github.ref_name }}
 
-            Magisk module to unlock **ALL** Game Space features on RedMagic devices.
-            No LSPosed required — no APK replacement — pure system property approach.
-
-            ### What's New in v2.3.1
-            - 🔧 **FIXED**: Super Resolution property (vendor left it EMPTY!)
-            - 🔧 **FIXED**: gamespace_config — all 17 feature flags now enabled
-            - 🔧 **FIXED**: Translation plugin restored (added to whitelist)
-            - 🔧 **FIXED**: Refreshrate plugin whitelisted for all games
-            - ✅ Sidebutton launcher working (fixed in v2.3.0)
-            - 🎯 ALL plugins whitelisted for ALL games
-            - 📋 Enhanced diagnostic log at `/sdcard/GSU_diagnostic.log`
-
-            ### What v2.3.0 Diagnostic Revealed
-            - `zte_feature_magic_super_resolution` was **EMPTY** — vendor never sets it
-            - `gamespace_config` had 5 disabled flags (positions 2,4,5,e,f)
-            - Translation plugin wasn't in our whitelist override list
-
-            ### Unlocked Features
-            - ⚡ Super Resolution — now available in ALL games
-            - 🎮 Frame Rate Boost / GFRC (R3 chip)
-            - 🎯 Crosshair, Hunt Mode, Sight Assist, AI Trigger — ALL games
-            - 🤖 Sound Equalizer, 4D Vibrate, Voice Controller
-            - 📊 Game Prediction, Combat Power, AI Tips — ALL games
-            - 🔊 Game Magic Voice (vendor-disabled, force-enabled)
-            - 🌐 Translation (link_mics_translation) — ALL games
-            - 🎯 All 70+ sidebar plugins enabled and whitelisted
-
-            ### Requirements
-            - RedMagic device with Game Space
-            - Magisk v20.4+ or KernelSU
+            Bug fixes and stability improvements.
 
             ### Installation
-            1. Download `GameSpaceUnleashed-${{ steps.version.outputs.version }}.zip`
-            2. Magisk → Modules → Install from storage
-            3. Reboot
-            4. Open any game → ALL plugins should be available!
-            5. Check `/sdcard/GSU_diagnostic.log` to verify
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Update auto-updater JSON
-        run: |
-          VERSION=${{ steps.version.outputs.version }}
-          VERSIONCODE=${{ steps.version.outputs.versionCode }}
-          cat > update.json << UPDATEEOF
-          {
-            "version": "${VERSION}",
-            "versionCode": ${VERSIONCODE},
-            "zipUrl": "https://github.com/JueN-Sar/GameSpaceUnleashed/releases/download/${VERSION}/GameSpaceUnleashed-${VERSION}.zip",
-            "changelog": "https://github.com/JueN-Sar/GameSpaceUnleashed/releases/tag/${VERSION}"
-          }
-          UPDATEEOF
-
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add update.json
-          git diff --cached --quiet || git commit -m "chore: update auto-updater to ${VERSION}" && git push
+            1. Flash the zip in Magisk / KernelSU
+            2. Reboot
+            3. Enjoy
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
