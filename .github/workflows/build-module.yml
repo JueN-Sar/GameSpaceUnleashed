@@ -72,26 +72,19 @@ jobs:
             Magisk module to unlock **ALL** Game Space features on RedMagic devices.
             No LSPosed required — no APK replacement — pure system property approach.
 
-            ### What's New in v2.3.0
-            - 🔧 **FIXED**: Sidebutton launcher (removed redundant property overwrites)
-            - 🎯 **NEW**: Plugin whitelists overridden — ALL plugins in ALL games
-            - 🚫 Plugin blacklists cleared
-            - ✅ GFRC runtime properties enabled
-            - ✅ Original GameAssist & GameSpace APKs untouched
-            - 📋 Diagnostic log at `/sdcard/GSU_diagnostic.log`
+            ### What's New in v2.3.1
+            - 🔧 **FIXED**: Super Resolution property (vendor left it EMPTY!)
+            - 🔧 **FIXED**: gamespace_config — all 17 feature flags now enabled
+            - 🔧 **FIXED**: Translation plugin restored (added to whitelist)
+            - 🔧 **FIXED**: Refreshrate plugin whitelisted for all games
+            - ✅ Sidebutton launcher working (fixed in v2.3.0)
+            - 🎯 ALL plugins whitelisted for ALL games
+            - 📋 Enhanced diagnostic log at `/sdcard/GSU_diagnostic.log`
 
-            ### Why v2.2.0 Broke the Sidebutton
-            The diagnostic proved the vendor ALREADY sets all 100+ game feature
-            properties to `true`. v2.2.0's `system.prop` redundantly re-set them
-            via `resetprop`, which interfered with the sidebutton launcher.
-            v2.3.0 only sets the 2 properties the vendor doesn't.
-
-            ### How Plugin Unlock Works
-            GameAssist checks `Settings.Global["game_assist_white_list_{plugin}"]`
-            to determine which games a plugin shows for. The matching uses
-            `String.contains()`, so setting the whitelist to `"."` matches
-            every package name (they all contain dots). v2.3.0 sets this for
-            all 27+ plugins that have restrictive whitelists.
+            ### What v2.3.0 Diagnostic Revealed
+            - `zte_feature_magic_super_resolution` was **EMPTY** — vendor never sets it
+            - `gamespace_config` had 5 disabled flags (positions 2,4,5,e,f)
+            - Translation plugin wasn't in our whitelist override list
 
             ### Unlocked Features
             - ⚡ Super Resolution — now available in ALL games
@@ -100,6 +93,7 @@ jobs:
             - 🤖 Sound Equalizer, 4D Vibrate, Voice Controller
             - 📊 Game Prediction, Combat Power, AI Tips — ALL games
             - 🔊 Game Magic Voice (vendor-disabled, force-enabled)
+            - 🌐 Translation (link_mics_translation) — ALL games
             - 🎯 All 70+ sidebar plugins enabled and whitelisted
 
             ### Requirements

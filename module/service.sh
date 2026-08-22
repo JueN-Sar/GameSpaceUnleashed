@@ -1,5 +1,5 @@
 #!/system/bin/sh
-# Game Space Unleashed v2.3.0 by MsysteM — Boot Service
+# Game Space Unleashed v2.3.1 by MsysteM — Boot Service
 # Properties are handled by system.prop + post-fs-data.sh
 # This script handles:
 #   1. Override plugin whitelists so ALL plugins show for ALL games
@@ -16,7 +16,7 @@ while [ "$(getprop sys.boot_completed)" != "1" ]; do
 done
 sleep 5
 
-log -t "GSU" "Game Space Unleashed v2.3.0: Starting post-boot setup..."
+log -t "GSU" "Game Space Unleashed v2.3.1: Starting post-boot setup..."
 
 # ====================================================================
 # 1. Override plugin whitelists — make ALL plugins available in ALL games
@@ -57,6 +57,9 @@ operation_devices
 redmagic_broadcast
 voice_controller
 timer
+link_mics_translation
+refreshrate
+active_mode
 "
 
 for plugin in $WHITELISTED_PLUGINS; do
@@ -199,7 +202,7 @@ log -t "GSU" "Set GFRC mode for $(echo "$GFRC_PACKAGES" | wc -w) games"
 # 5. Diagnostic dump — saves to /sdcard/GSU_diagnostic.log
 # ====================================================================
 
-echo "=== Game Space Unleashed v2.3.0 Diagnostic ===" > "$LOG"
+echo "=== Game Space Unleashed v2.3.1 Diagnostic ===" > "$LOG"
 echo "Date: $(date)" >> "$LOG"
 echo "Device: $(getprop ro.product.model) ($(getprop ro.product.brand))" >> "$LOG"
 echo "Android: $(getprop ro.build.version.release) (SDK $(getprop ro.build.version.sdk))" >> "$LOG"
@@ -214,7 +217,6 @@ ro.vendor.feature.zte_feature_red_magic_phone
 ro.vendor.feature.zte_feature_magic_game_assist
 ro.vendor.feature.zte_feature_gfrc
 ro.vendor.feature.zte_feature_magic_super_resolution
-ro.vendor.feature.zte_feature_gamespace_config
 ro.vendor.feature.zte_feature_side_shortcut_key
 ro.vendor.feature.zte_feature_shoulder_key_launch_gamespace
 ro.vendor.feature.zte_feature_game_fan
@@ -231,8 +233,18 @@ for prop in $CRITICAL_PROPS; do
 done
 
 echo "" >> "$LOG"
+echo "=== gamespace_config (should all be :1) ===" >> "$LOG"
+gs_config=$(getprop ro.vendor.feature.zte_feature_gamespace_config)
+echo "  Value: ${gs_config}" >> "$LOG"
+if echo "$gs_config" | grep -q ':0'; then
+    echo "  ⚠ Some flags still disabled!" >> "$LOG"
+else
+    echo "  ✓ All flags enabled" >> "$LOG"
+fi
+
+echo "" >> "$LOG"
 echo "=== Plugin Whitelist Overrides (should all be '.') ===" >> "$LOG"
-for plugin in hunting_mode ai_detect ai_tip vibrate game_prediction super_resolution; do
+for plugin in hunting_mode ai_detect ai_tip vibrate game_prediction super_resolution refreshrate link_mics_translation active_mode; do
     val=$(settings get global "game_assist_white_list_${plugin}" 2>/dev/null)
     echo "  game_assist_white_list_${plugin} = '${val}'" >> "$LOG"
 done
@@ -256,11 +268,11 @@ gfrc_val=$(settings get global game_gfrc_mode 2>/dev/null)
 echo "  game_gfrc_mode = ${gfrc_val:-'(not set)'}" >> "$LOG"
 
 echo "" >> "$LOG"
-echo "=== v2.3.0 Changes ===" >> "$LOG"
-echo "  - Removed redundant system.prop (vendor already sets all game props)" >> "$LOG"
-echo "  - Removed post-fs-data.sh bulk resetprop (was breaking sidebutton)" >> "$LOG"
-echo "  - Added whitelist overrides: all plugins available in ALL games" >> "$LOG"
-echo "  - Cleared plugin blacklists" >> "$LOG"
+echo "=== v2.3.1 Changes ===" >> "$LOG"
+echo "  - Added: zte_feature_magic_super_resolution = true (was EMPTY)" >> "$LOG"
+echo "  - Added: zte_feature_shoulder_key_launch_gamespace = true (was EMPTY)" >> "$LOG"
+echo "  - Override: gamespace_config all flags → 1 (was 2:0,4:0,5:0,e:0,f:0)" >> "$LOG"
+echo "  - Added: link_mics_translation, refreshrate, active_mode to whitelist" >> "$LOG"
 
 log -t "GSU" "Diagnostic saved to $LOG"
-log -t "GSU" "Game Space Unleashed v2.3.0: Setup complete! ✓"
+log -t "GSU" "Game Space Unleashed v2.3.1: Setup complete! ✓"

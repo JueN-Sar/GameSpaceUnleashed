@@ -6,13 +6,14 @@ SKIPUNZIP=0
 
 ui_print "╔══════════════════════════════════════╗"
 ui_print "║   Game Space Unleashed by MsysteM    ║"
-ui_print "║            v2.3.0                     ║"
+ui_print "║            v2.3.1                     ║"
 ui_print "╚══════════════════════════════════════╝"
 ui_print ""
-ui_print "→ Plugin whitelist override"
+ui_print "→ What's new in v2.3.1:"
+ui_print "  ✓ Super Resolution property unlocked"
+ui_print "  ✓ gamespace_config ALL flags enabled"
+ui_print "  ✓ Translation + refreshrate whitelisted"
 ui_print "  ✓ ALL plugins available for ALL games"
-ui_print "  ✓ Plugin blacklists cleared"
-ui_print "  ✓ GFRC runtime properties enabled"
 ui_print "  ✓ No APK replacement — original apps intact"
 ui_print ""
 
@@ -44,6 +45,11 @@ rm -rf "$MODPATH/system/app/GameAssist" 2>/dev/null
 rm -rf "$MODPATH/system/priv-app/GameSpace" 2>/dev/null
 rm -rf "$MODPATH/system" 2>/dev/null
 
+# Remove old Zygisk/DEX files from previous versions
+rm -rf "$MODPATH/zygisk" 2>/dev/null
+rm -rf "$MODPATH/dex" 2>/dev/null
+rm -rf "$MODPATH/webroot" 2>/dev/null
+
 # Set permissions
 set_perm_recursive $MODPATH 0 0 0755 0644
 set_perm $MODPATH/service.sh 0 0 0755
@@ -58,7 +64,4 @@ ui_print ""
 ui_print "→ Diagnostic log: /sdcard/GSU_diagnostic.log"
 ui_print "  (created after first boot with module active)"
 ui_print ""
-ui_print "v2.3.0: Plugin whitelists overridden for all games"
-ui_print "  Fixed: sidebutton launcher (removed redundant props)"
-ui_print "  Fixed: missing plugins in unsupported games"
 ui_print ""

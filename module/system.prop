@@ -1,18 +1,19 @@
-# Game Space Unleashed by MsysteM — System Properties
-# v2.3.0: Only set properties the VENDOR doesn't already set.
-# The diagnostic proved the vendor already sets all game feature props to true.
-# Re-setting them via system.prop caused the sidebutton launcher to break.
-#
-# This file ONLY contains properties that are either:
-# - NOT set by vendor at all
-# - Set to false by vendor but we want true
+# Game Space Unleashed v2.3.1 by MsysteM
+# Properties the vendor DOESN'T set (or sets wrong).
+# The vendor already sets 100+ zte_feature_* props to true — don't duplicate those.
 
-# ── MFV Window Reply (not in vendor's default prop list) ──
-ro.vendor.feature.mfv_feature_windowreply=true
+# Super Resolution feature gate — vendor leaves this EMPTY
+ro.vendor.feature.zte_feature_magic_super_resolution=true
 
-# ── Game Magic Voice (vendor sets false, we force true) ──
+# Shoulder key → launch GameSpace — vendor leaves this EMPTY
+ro.vendor.feature.zte_feature_shoulder_key_launch_gamespace=true
+
+# Game magic voice — vendor sets this false
 ro.vendor.feature.zte_feature_game_magic_voice=true
 
-# ── GFRC persist properties (non-ro, but set early) ──
+# Window reply — may not be in vendor defaults
+ro.vendor.feature.mfv_feature_windowreply=true
+
+# GFRC persistent properties
 persist.magic.super.resolution=1
 persist.vendor.gfrc.enable=1
