@@ -8,13 +8,17 @@ Magisk module that unlocks **ALL** Game Space features for **ALL** games on RedM
 
 Opens every single gate in Game Space so that ALL features appear for ALL games, not just the officially supported ones.
 
-### Unlocked Features
+It even unlocks options that are meant for CN Rom
 
+what i use it for:
 | Feature | What It Does |
 |---------|-------------|
 | ⚡ **Super Resolution / Superior Pic Quality** | R3 chip upscales lower resolution for better visuals |
 | 🎮 **Frame Rate Boost / Frame Interpolation** | R3 chip inserts frames → forces 2K + 120FPS |
 If an game does not support it, it might hang/lagg/crash.
+
+
+
 
 
 ## Requirements
